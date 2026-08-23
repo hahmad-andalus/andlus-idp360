@@ -2899,9 +2899,14 @@ function BranchManagerPanel({ user, onLogout }) {
     const branches = (user.branches&&user.branches.length)?user.branches:(user.branch?[user.branch]:[]);
     const finalCandidates = (users||[]).filter(u=>{
      if(!branches.includes(u.branch)) return false;
-     const idp=idps[u.id]; if(!idp?.approved) return false;      // لا بدّ من الاعتماد الفني
-     // يشمل: المعتمدين ماليّاً من مدير المرحلة، + القيادات/المتابعين (يعتمدهم مدير الفرع مباشرة)، + من تجاوز سقف المرحلة
-     return planCost(idp)>0;
+     const idp=idps[u.id]; if(!idp?.approved) return false;      // لا بدّ من الاعتماد الفني أولاً
+     if(planCost(idp)<=0) return false;
+     // المعلم/الإداري: يظهر لمدير الفرع فقط بعد اعتماد مدير المرحلة المالي، أو إذا رُفع إليه لتجاوزه سقف المرحلة
+     if(underStageFinance(u)){
+      return idp.financeApproved || idp.needsBranchApproval;
+     }
+     // القيادات والمتابعون الفنيون والمشرف المختص: يعتمدهم مدير الفرع مباشرة بعد الاعتماد الفني
+     return true;
     });
     const usedBranch = finalCandidates.filter(u=>idps[u.id]?.branchFinanceApproved).reduce((s,u)=>s+planCost(idps[u.id]),0);
     if(finalCandidates.length===0) return null;
@@ -4354,11 +4359,14 @@ function AnalyticsDashboard({ scope, evals, idps, impactData, unitLabel="فرع"
    ))}
    {fixedMode&&<div style={{fontSize:14,fontWeight:900,color:mode==="growth"?"#10B981":"#2E7FB8"}}>{mode==="growth"?"🎯 لوحة متابعة التطور المهني":"📊 لوحة متابعة تقييم الأداء"}</div>}
    <div style={{flex:1}}/>
-   {units.length>1&&(
+   {units.length>=1&&(
+   <>
+   <span style={{fontSize:11,color:"#8CA3BD",fontWeight:700}}>🔍 تصفية:</span>
    <select value={unitFilter} onChange={e=>setUnitFilter(e.target.value)} style={{padding:"9px 14px",borderRadius:12,border:"1px solid #DDE9F5",background:"#fff",color:"#15385C",fontSize:12,fontWeight:700}}>
    <option value="">كل {unitLabel==="فرع"?"الفروع والإدارات":unitLabel}</option>
    {units.map(u=><option key={u} value={u}>{u}</option>)}
    </select>
+   </>
    )}
    </div>
 
@@ -4940,17 +4948,23 @@ function AdminPanel({ onLogout }) {
    <div style={{padding:"0 16px 16px"}}><WeightsEditor onSaved={()=>showToast("✓ حُفظت الأوزان")}/></div>
    </details>
 
-   {/* لوحة معلومات متابعة تقييم الأداء (رسوم بيانية) */}
+   {/* لوحة معلومات متابعة تقييم الأداء (رسوم بيانية) — الأساس */}
    <AnalyticsDashboard scope={(users||[]).filter(u=>u.role!=="admin")} evals={evals} idps={idps} impactData={impactData} unitLabel="فرع" getUnit={(u)=>u.branch||"—"} fixedMode="eval"/>
 
-   {/* ب) التقرير التنفيذي التفصيلي */}
-   <ExecEvalReport users={users||[]} evals={evals} approvals={approvals} locks={locks} onOpenCard={(u)=>setViewUser(u)}/>
+   {/* التفاصيل حسب الموظف (اختياري — مطويّ) */}
+   <details style={{marginTop:18,background:"#fff",border:"1px solid #E8F0F9",borderRadius:14,overflow:"hidden"}}>
+   <summary style={{padding:"14px 16px",cursor:"pointer",fontSize:13,fontWeight:800,color:"#2E7FB8",listStyle:"none"}}>📋 تفاصيل تقييم الموظفين حسب الفرع (اضغط للعرض)</summary>
+   <div style={{padding:"0 16px 16px"}}><ExecEvalReport users={users||[]} evals={evals} approvals={approvals} locks={locks} onOpenCard={(u)=>setViewUser(u)}/></div>
+   </details>
   </div>
   )}
   {tab==="report"&&(
   <>
   <AnalyticsDashboard scope={(users||[]).filter(u=>u.role!=="admin")} evals={evals} idps={idps} impactData={impactData} unitLabel="فرع" getUnit={(u)=>u.branch||"—"} fixedMode="growth"/>
-  <div style={{marginTop:20}}><ExecGrowthReport users={users||[]} idps={idps} approvals={approvals} impactData={impactData} onOpenPlan={(u)=>setViewPlanUser(u)}/></div>
+  <details style={{marginTop:18,background:"#fff",border:"1px solid #E8F0F9",borderRadius:14,overflow:"hidden"}}>
+  <summary style={{padding:"14px 16px",cursor:"pointer",fontSize:13,fontWeight:800,color:"#10B981",listStyle:"none"}}>📋 تفاصيل خطط الموظفين حسب الفرع (اضغط للعرض)</summary>
+  <div style={{padding:"0 16px 16px"}}><ExecGrowthReport users={users||[]} idps={idps} approvals={approvals} impactData={impactData} onOpenPlan={(u)=>setViewPlanUser(u)}/></div>
+  </details>
   </>
   )}
   {tab==="library"&&(<>
@@ -5257,10 +5271,13 @@ function SupervisorTeamGrowth({ myTargets, idps, evals, editRequests, approvals,
   onApprove(empId, {...cur, approved:true, approvedBy:user.name, approvedAt:new Date().toISOString().split("T")[0], ...(stagePlansApproved?{needsBranchApproval:true}:{})});
   };
 
-  // إعادة فتح الخطة للموظف للتحرير (إن لم تلقَ قبول المتابع الفني بعد الإنهاء)
+  // إعادة فتح الخطة للموظف للتحرير — تلغي الإنهاء وكل الاعتمادات (فني/مالي/نهائي)
   const reopen = (empId) => {
   const cur = idps[empId]||{};
-  onApprove(empId, {...cur, isFinal:false, approved:false, reopenedBy:user.name, reopenedAt:new Date().toISOString().split("T")[0]});
+  onApprove(empId, {...cur, isFinal:false, approved:false, approvedBy:undefined, approvedAt:undefined,
+    financeApproved:false, financeApprovedBy:undefined, financeAmount:undefined,
+    branchFinanceApproved:false, needsBranchApproval:false,
+    reopenedBy:user.name, reopenedAt:new Date().toISOString().split("T")[0]});
   };
 
   if (!myTargets.length) return <div style={{textAlign:"center",padding:50,color:"#5B7A9E"}}><div style={{fontSize:40,marginBottom:12}}>👥</div>لا يوجد موظفون مرتبطون بك فنياً</div>;
@@ -5308,7 +5325,7 @@ function SupervisorTeamGrowth({ myTargets, idps, evals, editRequests, approvals,
   <div style={{display:"flex",gap:8,flexWrap:"wrap",margin:"14px 0"}}>
   <button onClick={()=>onOpenPlan(u)} style={{padding:"7px 14px",borderRadius:8,border:"1px solid #3B82F640",background:"#3B82F612",color:"#3B82F6",fontSize:11,cursor:"pointer",fontWeight:700}}>👁️ عرض الخطة كاملة</button>
   {!approved&&plan.isFinal&&<button onClick={()=>approve(u.id)} style={{padding:"7px 14px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#059669,#10B981)",color:"#fff",fontSize:11,cursor:"pointer",fontWeight:700}}>✅ اعتماد الخطة</button>}
-  {!approved&&plan.isFinal&&<button onClick={()=>{ if(confirm("إعادة فتح الخطة للموظف للتحرير؟ سيتمكّن من تعديلها وإعادة إنهائها.")) reopen(u.id); }} style={{padding:"7px 14px",borderRadius:8,border:"1px solid #F59E0B40",background:"#F59E0B12",color:"#F59E0B",fontSize:11,cursor:"pointer",fontWeight:700}} title="أعِد الخطة للموظف ليعدّلها إن لم تُقبَل">↩️ إعادة فتح للتحرير</button>}
+  {plan.isFinal&&<button onClick={()=>{ if(confirm("إعادة فتح التخطيط للموظف؟ سيعود قادراً على تعديل خطته وإعادة إغلاقها.")) reopen(u.id); }} style={{padding:"7px 14px",borderRadius:8,border:"1px solid #F59E0B40",background:"#F59E0B12",color:"#F59E0B",fontSize:11,cursor:"pointer",fontWeight:700}} title="أعِد التخطيط للموظف ليعدّل خطته">↩️ إعادة التخطيط للموظف</button>}
   {!approved&&!plan.isFinal&&<span style={{padding:"7px 14px",borderRadius:8,background:"#F1F5F9",border:"1px solid #E2E8F0",color:"#94A3B8",fontSize:11,fontWeight:700}} title="لم يُنهِ الموظف التخطيط بعد (في مرحلة الحفظ المؤقت)">⏳ بانتظار إغلاق الموظف للتخطيط</span>}
   {approved&&(!req||req.status!=="pending")&&<button onClick={()=>setEditModal({emp:u,rows})} style={{padding:"7px 14px",borderRadius:8,border:"1px solid #F59E0B40",background:"#F59E0B12",color:"#F59E0B",fontSize:11,cursor:"pointer",fontWeight:700}}>✏️ طلب تعديل بند (بديل)</button>}
   </div>
@@ -6940,10 +6957,29 @@ function ExecPanel({ user, onLogout }) {
     unitLabel="فرع"
     getUnit={(u)=>u.branch||"—"}
     fixedMode={tab==="perf"?"eval":"growth"}
-    onOpenCard={(u)=>setViewTarget(u)}
-    onOpenPlan={(u)=>setViewPlanTarget(u)}
    />
    )}
+
+   {/* القيادات المباشرون فقط — يطّلع التنفيذي على بطاقاتهم/خططهم (لا الموظفين) */}
+   {(tab==="perf"||tab==="growth")&&(()=>{
+    const directLeaders = scope.filter(u=>["branch_mgr","dept_mgr","stage_mgr","deputy","exec"].includes(u.role) && getEvaluators(u,users).some(e=>e.id===user.id));
+    if(!directLeaders.length) return null;
+    return (
+    <div style={{marginTop:20,background:"#fff",border:"1px solid #E8F0F9",borderRadius:16,padding:18}}>
+    <div style={{fontSize:14,fontWeight:900,color:"#15385C",marginBottom:4}}>🏛️ القيادات التابعون لك مباشرة</div>
+    <div style={{fontSize:11,color:"#8CA3BD",marginBottom:14}}>يمكنك الاطّلاع على {tab==="perf"?"بطاقة تقييم":"خطة تطوّر"} كل قيادي تابع لك مباشرة ({directLeaders.length}).</div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:10}}>
+    {directLeaders.map(u=>(
+    <div key={u.id} style={{border:"1px solid #E3EEF9",borderRadius:12,padding:"12px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+    <div><div style={{fontSize:13,fontWeight:800,color:"#15385C"}}>{u.name}</div>
+    <div style={{fontSize:10,color:"#8CA3BD"}}>{ROLES_LIST[u.role]}{u.branch?` • ${u.branch}`:""}</div></div>
+    <button onClick={()=>tab==="perf"?setViewTarget(u):setViewPlanTarget(u)} style={{padding:"6px 12px",borderRadius:8,border:"1px solid #2E7FB830",background:"#2E7FB812",color:"#2E7FB8",fontSize:11,cursor:"pointer",fontWeight:700,whiteSpace:"nowrap"}}>{tab==="perf"?"عرض التقييم":"عرض الخطة"}</button>
+    </div>
+    ))}
+    </div>
+    </div>
+    );
+   })()}
 
    {tab==="mine"&&(
    <MyPlanAndEval user={user} idps={idps} evals={evals} impactData={impactData} readings={readings} locks={locks} setLocks={setLocks} evalWinData={evalWinData}

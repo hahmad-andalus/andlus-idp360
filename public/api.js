@@ -339,7 +339,7 @@
 
   function mapUserToClient(u) {
     return {
-      id: u.id, username: u.username, name: u.name, nationalId: u.national_id,
+      id: u.id, username: u.username, name: u.name, nationalId: u.national_id, jobNumber: u.job_number || u.jobNumber || null,
       role: u.role, roleSubtype: u.roleSubtype || u.role_subtype || null, job: u.job, branch: u.branch, stage: u.stage,
       supervisorType: u.supervisor_type, supervisorId: u.supervisor_id,
       stageManagerId: u.stage_manager_id,

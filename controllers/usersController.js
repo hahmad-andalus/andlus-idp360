@@ -51,11 +51,11 @@ async function create(req, res) {
 
   const tx = db.transaction(() => {
     db.prepare(`INSERT INTO users
-      (id, username, password_hash, name, national_id, role, role_subtype, job, branch, stage, supervisor_type, supervisor_id, stage_manager_id)
-      VALUES (@id,@username,@password_hash,@name,@national_id,@role,@role_subtype,@job,@branch,@stage,@supervisor_type,@supervisor_id,@stage_manager_id)`)
+      (id, username, password_hash, name, national_id, job_number, role, role_subtype, job, branch, stage, supervisor_type, supervisor_id, stage_manager_id)
+      VALUES (@id,@username,@password_hash,@name,@national_id,@job_number,@role,@role_subtype,@job,@branch,@stage,@supervisor_type,@supervisor_id,@stage_manager_id)`)
       .run({
         id, username: b.username, password_hash: hash, name: b.name,
-        national_id: b.nationalId || null, role: b.role, role_subtype: b.roleSubtype || null, job: b.job || null,
+        national_id: b.nationalId || null, job_number: b.jobNumber || null, role: b.role, role_subtype: b.roleSubtype || null, job: b.job || null,
         branch: b.branch || null, stage: b.stage || null,
         supervisor_type: b.supervisorType || null,
         supervisor_id: b.supervisorId || null, stage_manager_id: b.stageManagerId || null,
@@ -82,13 +82,13 @@ async function update(req, res) {
 
   const tx = db.transaction(() => {
     db.prepare(`UPDATE users SET
-      name=@name, national_id=@national_id, role=@role, role_subtype=@role_subtype, job=@job,
+      name=@name, national_id=@national_id, job_number=@job_number, role=@role, role_subtype=@role_subtype, job=@job,
       branch=@branch, stage=@stage, supervisor_type=@supervisor_type,
       supervisor_id=@supervisor_id, stage_manager_id=@stage_manager_id,
       password_hash=@password_hash, updated_at=datetime('now')
       WHERE id=@id`)
       .run({
-        id, name: b.name ?? u.name, national_id: b.nationalId ?? u.national_id,
+        id, name: b.name ?? u.name, national_id: b.nationalId ?? u.national_id, job_number: b.jobNumber ?? u.job_number,
         role: b.role ?? u.role, role_subtype: b.roleSubtype ?? u.role_subtype, job: b.job ?? u.job, branch: b.branch ?? u.branch,
         stage: b.stage ?? u.stage, supervisor_type: b.supervisorType ?? u.supervisor_type,
         supervisor_id: b.supervisorId ?? u.supervisor_id,

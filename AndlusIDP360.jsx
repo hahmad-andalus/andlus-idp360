@@ -3,7 +3,9 @@ import React, { useState, useEffect, useMemo } from "react";
 const MONO='IBM Plex Mono';
 const LogoImg = ({style, size=17}) => (
   <div style={{display:"flex",alignItems:"center",justifyContent:"center",...style}}>
-  <div style={{fontSize:size,fontWeight:900,color:"#1D5A8A",letterSpacing:0.3,lineHeight:1.2,textAlign:"center",whiteSpace:"nowrap"}}>شركة الأندلس التعليمية</div>
+  <img src={(typeof window!=="undefined"&&window.__ANDALUS_LOGO_B64)?window.__ANDALUS_LOGO_B64:"/andalus-logo.jpg"} alt="شركة الأندلس التعليمية" style={{height:size*2.4,width:"auto",maxWidth:"100%",objectFit:"contain"}}
+   onError={(e)=>{ e.target.style.display="none"; if(e.target.nextSibling) e.target.nextSibling.style.display="block"; }}/>
+  <div style={{display:"none",fontSize:size,fontWeight:900,color:"#1D5A8A",letterSpacing:0.3,lineHeight:1.2,textAlign:"center",whiteSpace:"nowrap"}}>شركة الأندلس التعليمية</div>
   </div>
 );
 
@@ -188,6 +190,33 @@ const EVAL_RELATIONS = {
 // دوال مساعدة للمطابقة
 function sameBranch(a,b){ return a.branch && a.branch===b.branch; }
 function sameStage(a,b){ return a.stage && a.stage===b.stage; }
+
+// ═══ الاعتماد المالي لخطط التطوّر (فروع فقط) ═══
+const parseCost = (v)=>{ const n=parseFloat(String(v||"").replace(/[^\d.]/g,"")); return isNaN(n)?0:n; };
+// تكلفة خطة موظف = مجموع تكاليف بنودها
+const planCost = (idp)=> (idp?.plan||[]).reduce((s,r)=>s+parseCost(r.cost),0);
+// المعامل المالي لكل شخص حسب مسمّاه (للسقوف)
+const PER_PERSON_BUDGET = { teacher:400, specialist:400, deputy:1500, stage_mgr:1500, branch_ext:1000 };
+const personBudget = (u)=>{
+  if(!u) return 0;
+  if(u.role==="employee") return 400;                         // معلم/إداري
+  if(u.role==="supervisor"&&u.roleSubtype==="specialist") return 400; // مشرف مختص
+  if(u.role==="deputy"||u.role==="stage_mgr") return 1500;    // وكيل/مدير مرحلة
+  if(u.role==="branch_ext") return 1000;                       // امتداد فني
+  return 0;
+};
+// هل يخضع الشخص للاعتماد المالي عبر مدير المرحلة؟ (معلم/إداري + مشرف مختص فقط — لا القيادات ولا المتابع الفني)
+const underStageFinance = (u)=> u && (u.role==="employee");   // مدير المرحلة يعتمد ماليّاً لموظفي مرحلته (معلم/إداري)
+// سقف مدير المرحلة = 400 × عدد موظفيه (معلم/إداري) في مرحلته
+const stageMgrCap = (mgr, allUsers)=>{
+  const emps=(allUsers||[]).filter(u=>u.role==="employee"&&u.branch===mgr.branch&&u.stage===mgr.stage);
+  return emps.length*400;
+};
+// سقف مدير الفرع = مجموع معاملات كل التابعين لفرعه
+const branchMgrCap = (mgr, allUsers)=>{
+  const branches = (mgr.branches&&mgr.branches.length)?mgr.branches:(mgr.branch?[mgr.branch]:[]);
+  return (allUsers||[]).filter(u=>branches.includes(u.branch)).reduce((s,u)=>s+personBudget(u),0);
+};
 function isAdminStaff(u){ return u.role==="employee" && (u.roleSubtype==="admin_staff" || /إداري|موجه|مراقب|رائد|قبول/.test(u.job||"")); }
 
 // يُرجع قائمة المُقيّمين (مرؤوسين/مستفيدين) لشخص معيّن، حسب الخريطة
@@ -454,15 +483,15 @@ const CAT_COLORS = { أساسية:"#3B82F6", عامة:"#10B981", فنية:"#F59E
 // التسمية المعروضة للمستخدم (القيمة المخزّنة تبقى "عامة" لعدم كسر البيانات)
 const CAT_LABEL = { أساسية:"أساسية", عامة:"عامة/إدارية/قيادية", فنية:"فنية" };
 const catName = c => CAT_LABEL[c] || c;
-const SCORE_LABELS = ["","ضعيف","مقبول","جيد","جيد جداً","ممتاز"];
+const SCORE_LABELS = ["","دون التوقعات","جيد","جيد جداً","ممتاز","يفوق التوقعات"];
 const SCORE_COLORS = ["","#EF4444","#F97316","#F59E0B","#3B82F6","#10B981"];
 
 const getLevel = s => {
-  if (s >= 5)   return { label:"ممتاز",   color:"#10B981" };
-  if (s >= 4)   return { label:"جيد جداً", color:"#3B82F6" };
-  if (s >= 3)   return { label:"جيد",      color:"#F59E0B" };
-  if (s >= 2)   return { label:"مقبول",    color:"#F97316" };
-  return           { label:"ضعيف",     color:"#EF4444" };
+  if (s >= 4.5) return { label:"يفوق التوقعات", color:"#10B981" };
+  if (s >= 3.5) return { label:"ممتاز",         color:"#3B82F6" };
+  if (s >= 2.5) return { label:"جيد جداً",       color:"#F59E0B" };
+  if (s >= 1.5) return { label:"جيد",            color:"#F97316" };
+  return             { label:"دون التوقعات",    color:"#EF4444" };
 };
 
 const IDP_NEED_SOURCES = ["نتائج تقييم الأداء الوظيفي","نتائج الزيارات الصفية","ملاحظات المدير المباشر","نتائج الزيارات الميدانية","نتائج استطلاعات الرأي من المعنيين","ملاحظات زملاء التخصص","أخرى"];
@@ -627,7 +656,7 @@ function generateAttendanceCertificate({ name, courseName, date, hours, trainer 
   </style></head><body>
   <button class="noprint" onclick="window.print()">🖨️ طباعة / حفظ PDF</button>
   <div class="cert">
-    <div class="logo">شركة الأندلس التعليمية</div>
+    <div class="logo"><img src="${window.location.origin}/andalus-logo.jpg" alt="شركة الأندلس التعليمية" style="height:70px;width:auto;object-fit:contain;" onerror="this.style.display='none';this.nextElementSibling.style.display='block';"/><span style="display:none;">شركة الأندلس التعليمية</span></div>
     <div class="title">شهادة حضور</div>
     <div class="rule"></div>
     <div class="line">تشهد شركة الأندلس التعليمية بأن:</div>
@@ -683,7 +712,7 @@ function groupStats(empList, evals) {
   const stdDev=avgs.length>1?Math.sqrt(avgs.reduce((s,v)=>s+Math.pow(v-(groupAvg||0),2),0)/avgs.length):null;
   const partyAvgScores={};
   EVAL_PARTIES.forEach(p=>{const sc=allStats.map(s=>s.partyScores?.[p.key]?.avg).filter(x=>x!=null);partyAvgScores[p.key]=sc.length>0?sc.reduce((a,b)=>a+b,0)/sc.length:null;});
-  const levelDist={"ممتاز":0,"جيد جداً":0,"جيد":0,"مقبول":0,"ضعيف":0};
+  const levelDist={"يفوق التوقعات":0,"ممتاز":0,"جيد جداً":0,"جيد":0,"دون التوقعات":0};
   avgs.forEach(a=>{levelDist[getLevel(a).label]=(levelDist[getLevel(a).label]||0)+1;});
   const ranked=allStats.map((s,i)=>({...s,user:empList[i]})).filter(s=>s.avg!==null).sort((a,b)=>b.avg-a.avg);
   const compMap={};
@@ -1232,7 +1261,9 @@ function EvalForm({ partyKey, targetUser, existingScores, onSave, onCancel, lock
   const comps = (getActiveJobs()[targetUser.job]||[]).filter(c => allowedCats.includes(getCat(c)));
   const [scores,setScores] = useState(existingScores||{});
   const [witnesses,setWitnesses] = useState(existingScores?.__witnesses||{});
-  const requiresWitness = ["supervisor","stage_mgr"].includes(partyKey);
+  const [witnessFiles,setWitnessFiles] = useState(existingScores?.__witnessFiles||{}); // مرفقات الشاهد (base64، حد 1MB)
+  const [fileErr,setFileErr] = useState({});
+  const requiresWitness = true; // الشاهد مطلوب لكل أطراف التقييم بلا استثناء عند الدرجة 5
   const lockKey = lockKeyOverride || `${targetUser.id}__${partyKey}`;
   const isLocked = !!(locks && locks[lockKey]);
   const [showLockConfirm, setShowLockConfirm] = useState(false);
@@ -1242,14 +1273,44 @@ function EvalForm({ partyKey, targetUser, existingScores, onSave, onCancel, lock
   const updated = {...cur,[idx]: cur[idx]===val ? 0 : val};
   if (updated[idx] !== 5 && requiresWitness) {
    setWitnesses(pw=>{ const nw={...pw}; delete nw[`${comp}__${idx}`]; return nw; });
+   setWitnessFiles(pf=>{ const nf={...pf}; delete nf[`${comp}__${idx}`]; return nf; });
   }
   return {...prev,[comp]:updated};
   });
 
   const setWitness = (comp,idx,text) => setWitnesses(prev=>({...prev,[`${comp}__${idx}`]:text}));
 
+  const onWitnessFile = (comp,idx,file) => {
+   const key=`${comp}__${idx}`;
+   setFileErr(pe=>{ const ne={...pe}; delete ne[key]; return ne; });
+   if(!file) return;
+   if(file.size > 1024*1024){ setFileErr(pe=>({...pe,[key]:"حجم المرفق يتجاوز 1 ميجابايت"})); return; }
+   const reader=new FileReader();
+   reader.onload=()=>{ setWitnessFiles(pf=>({...pf,[key]:{name:file.name,type:file.type,size:file.size,data:reader.result}})); };
+   reader.onerror=()=>setFileErr(pe=>({...pe,[key]:"تعذّرت قراءة الملف"}));
+   reader.readAsDataURL(file);
+  };
+  const removeWitnessFile = (comp,idx)=>setWitnessFiles(pf=>{ const nf={...pf}; delete nf[`${comp}__${idx}`]; return nf; });
+
+  // تحقّق: كل بند بالدرجة 5 يحتاج شاهداً صالحاً (رابط، أو نصّ 50-150 حرف، أو مرفق)
+  const missingWitness = (()=>{
+   for(const c of comps){
+    const items=getActiveComps()[c]?.items||[];
+    for(let i=0;i<items.length;i++){
+     if((scores[c]?.[i]||0)===5){
+      const w=(witnesses[`${c}__${i}`]||"").trim();
+      const hasFile=!!witnessFiles[`${c}__${i}`];
+      const isLink=/^https?:\/\//i.test(w);
+      if(!(isLink||(w.length>=50&&w.length<=150)||hasFile)) return true;
+     }
+    }
+   }
+   return false;
+  })();
+
   const handleSave = () => {
-  const payload = {...scores, __witnesses: witnesses};
+  if(missingWitness){ return; } // زر الحفظ معطّل أصلاً، حماية إضافية
+  const payload = {...scores, __witnesses: witnesses, __witnessFiles: witnessFiles };
   onSave(payload);
   };
 
@@ -1359,24 +1420,56 @@ function EvalForm({ partyKey, targetUser, existingScores, onSave, onCancel, lock
    </div>
    {s>0&&<div style={{width:54,fontSize:9,color:SCORE_COLORS[s],fontWeight:700,textAlign:"center",flexShrink:0,lineHeight:1.3}}>{SCORE_LABELS[s]}</div>}
    </div>
-   {/* حقل الشاهد عند الدرجة 5 */}
-   {needsWitness&&(
-   <div style={{marginTop:8,padding:"10px 12px",background:"#10B98108",border:`1px solid ${hasWitness?"#10B98140":"#F59E0B40"}`,borderRadius:8}}>
-   <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
-  <span style={{fontSize:14}}>📎</span>
-  <span style={{fontSize:11,color:hasWitness?"#10B981":"#F59E0B",fontWeight:700}}>
-  {hasWitness?"✓ تم إدراج الشاهد":"مطلوب: أدرج شاهداً على الدرجة الكاملة"}
-  </span>
+   {/* حقل الشاهد عند الدرجة 5 — رابط أو توضيح لفظي 50-150 حرف أو مرفق ≤1MB */}
+   {needsWitness&&(()=>{
+   const wlen=witnessText.trim().length;
+   const isLink=/^https?:\/\//i.test(witnessText.trim());
+   const wKey=`${c}__${idx}`;
+   const wFile=witnessFiles[wKey];
+   const validW = isLink || (wlen>=50 && wlen<=150) || !!wFile;
+   return (
+   <div style={{marginTop:8,padding:"10px 12px",background:"#10B98108",border:`1px solid ${validW?"#10B98140":"#F59E0B40"}`,borderRadius:8}}>
+   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:6,marginBottom:6,flexWrap:"wrap"}}>
+   <div style={{display:"flex",alignItems:"center",gap:6}}>
+   <span style={{fontSize:14}}>📎</span>
+   <span style={{fontSize:11,color:validW?"#10B981":"#F59E0B",fontWeight:700}}>
+   {validW?"✓ الشاهد مكتمل":"مطلوب: شاهد على الدرجة الكاملة (رابط، توضيح 50–150 حرف، أو مرفق)"}
+   </span>
    </div>
-   <input
-  value={witnessText}
-  onChange={e=>!isLocked&&setWitness(c,idx,e.target.value)}
-  readOnly={isLocked}
-  placeholder="صِف الدليل أو الشاهد الذي يُثبت هذه الدرجة (مثال: محضر اجتماع، نموذج، نتيجة قابلة للقياس...)"
-  style={{width:"100%",padding:"8px 10px",background:"#FFFFFF",border:`1px solid ${hasWitness?"#10B98130":"#F59E0B30"}`,borderRadius:7,color:"#1E293B",fontSize:11,boxSizing:"border-box",outline:"none"}}
+   {!isLink&&witnessText.trim().length>0&&(
+   <span style={{fontSize:10,fontWeight:700,color:wlen<50?"#F59E0B":wlen>150?"#EF4444":"#10B981"}}>{wlen}/150</span>
+   )}
+   </div>
+   <textarea
+   value={witnessText}
+   onChange={e=>{ if(isLocked)return; let v=e.target.value; if(!/^https?:\/\//i.test(v.trim())) v=v.slice(0,150); setWitness(c,idx,v); }}
+   readOnly={isLocked}
+   rows={2}
+   placeholder="أدرج رابطاً (يبدأ بـ http) أو توضيحاً لفظياً بين 50 و150 حرفاً، أو أرفق ملفاً بالأسفل"
+   style={{width:"100%",padding:"8px 10px",background:"#FFFFFF",border:`1px solid ${validW?"#10B98130":"#F59E0B30"}`,borderRadius:7,color:"#1E293B",fontSize:11,boxSizing:"border-box",outline:"none",resize:"vertical",fontFamily:"inherit"}}
    />
+   {!isLink&&wlen>0&&wlen<50&&!wFile&&<div style={{fontSize:9,color:"#F59E0B",marginTop:3}}>⚠️ التوضيح قصير — أضف {50-wlen} حرفاً على الأقل (أو أدرج رابطاً أو مرفقاً).</div>}
+   {/* المرفق */}
+   {!isLocked&&(
+   <div style={{marginTop:8,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+   {!wFile?(
+   <label style={{fontSize:10,color:"#2E7FB8",fontWeight:700,cursor:"pointer",background:"#2E7FB812",border:"1px dashed #2E7FB840",borderRadius:8,padding:"6px 12px"}}>
+   📎 إرفاق ملف (حتى 1MB)
+   <input type="file" onChange={e=>onWitnessFile(c,idx,e.target.files?.[0])} style={{display:"none"}}/>
+   </label>
+   ):(
+   <div style={{display:"flex",alignItems:"center",gap:8,background:"#10B98112",borderRadius:8,padding:"5px 10px"}}>
+   <span style={{fontSize:10,color:"#059669",fontWeight:700}}>📎 {wFile.name} ({Math.round(wFile.size/1024)}KB)</span>
+   <button onClick={()=>removeWitnessFile(c,idx)} style={{background:"none",border:"none",color:"#EF4444",fontSize:12,cursor:"pointer"}}>✕</button>
    </div>
    )}
+   {fileErr[wKey]&&<span style={{fontSize:10,color:"#EF4444",fontWeight:700}}>⚠️ {fileErr[wKey]}</span>}
+   </div>
+   )}
+   {isLocked&&wFile&&<div style={{fontSize:10,color:"#059669",marginTop:6}}>📎 مرفق: {wFile.name}</div>}
+   </div>
+   );
+   })()}
    </div>
   );
   })}
@@ -1411,16 +1504,18 @@ function EvalForm({ partyKey, targetUser, existingScores, onSave, onCancel, lock
   </div>
   )}
 
-  <div style={{display:"flex",gap:10,marginTop:8,position:"sticky",bottom:0,background:"#FFFFFF",padding:"12px 0",borderTop:"1px solid #C7DBF0"}}>
+  <div style={{display:"flex",gap:10,marginTop:8,position:"sticky",bottom:0,background:"#FFFFFF",padding:"12px 0",borderTop:"1px solid #C7DBF0",flexDirection:"column"}}>
+  {missingWitness&&<div style={{fontSize:11,color:"#F59E0B",fontWeight:700,textAlign:"center",background:"#F59E0B12",padding:"7px",borderRadius:8}}>⚠️ يوجد بند بالدرجة 5 بلا شاهد صالح — أدرج رابطاً أو توضيحاً (50–150 حرف) لكل درجة كاملة قبل الحفظ.</div>}
+  <div style={{display:"flex",gap:10}}>
   <button onClick={onCancel} style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid #C7DBF0",background:"transparent",color:"#5B7A9E",cursor:"pointer"}}>إغلاق</button>
   {!isLocked ? (
    <>
-   <button onClick={handleSave} disabled={scoredItems===0}
-  style={{flex:2,padding:"10px",borderRadius:10,border:"none",background:scoredItems>0?"linear-gradient(135deg,#10B981,#059669)":"#DDE9F5",color:scoredItems>0?"#fff":"#C7DBF0",fontWeight:700,cursor:scoredItems>0?"pointer":"default",fontSize:13}}>
+   <button onClick={handleSave} disabled={scoredItems===0||missingWitness}
+  style={{flex:2,padding:"10px",borderRadius:10,border:"none",background:(scoredItems>0&&!missingWitness)?"linear-gradient(135deg,#10B981,#059669)":"#DDE9F5",color:(scoredItems>0&&!missingWitness)?"#fff":"#C7DBF0",fontWeight:700,cursor:(scoredItems>0&&!missingWitness)?"pointer":"default",fontSize:13}}>
   💾 حفظ مؤقت ({scoredItems} بند)
    </button>
-   <button onClick={()=>scoredItems>0&&setShowLockConfirm(true)} disabled={scoredItems===0}
-  style={{flex:2,padding:"10px",borderRadius:10,border:"none",background:scoredItems>0?"linear-gradient(135deg,#DC2626,#EF4444)":"#DDE9F5",color:scoredItems>0?"#fff":"#C7DBF0",fontWeight:700,cursor:scoredItems>0?"pointer":"default",fontSize:13}}>
+   <button onClick={()=>scoredItems>0&&!missingWitness&&setShowLockConfirm(true)} disabled={scoredItems===0||missingWitness}
+  style={{flex:2,padding:"10px",borderRadius:10,border:"none",background:(scoredItems>0&&!missingWitness)?"linear-gradient(135deg,#DC2626,#EF4444)":"#DDE9F5",color:(scoredItems>0&&!missingWitness)?"#fff":"#C7DBF0",fontWeight:700,cursor:(scoredItems>0&&!missingWitness)?"pointer":"default",fontSize:13}}>
   🔒 حفظ وقفل
    </button>
    </>
@@ -1429,6 +1524,7 @@ function EvalForm({ partyKey, targetUser, existingScores, onSave, onCancel, lock
    🔒 التقييم مقفول — التعديل محظور
    </div>
   )}
+  </div>
   </div>
    </div>
   </div>
@@ -2331,7 +2427,7 @@ function RequestAccountForm({ user, onSubmit }) {
   const myBranches = scopeBranches(user);
   const scopeIsDept = isDepartment(myBranches[0]);
   const scopeWord = scopeIsDept ? "الإدارة" : "الفرع";
-  const [f,setF] = useState({ name:"", username:"", nationalId:"", password:"", role:"employee", roleSubtype:"", job:"", stage:"", branch: myBranches[0]||"" });
+  const [f,setF] = useState({ name:"", username:"", nationalId:"", jobNumber:"", password:"", role:"employee", roleSubtype:"", job:"", stage:"", branch: myBranches[0]||"" });
   const set = (k,v) => setF(p=>({...p,[k]:v}));
   const subtypes = ROLE_SUBTYPES[f.role] ? Object.entries(ROLE_SUBTYPES[f.role]) : [];
   // تحقّق صيغة البريد الإلكتروني (اسم المستخدم = البريد الفعلي)
@@ -2377,6 +2473,7 @@ function RequestAccountForm({ user, onSubmit }) {
    {f.username.trim()&&!emailOk&&<div style={{fontSize:9,color:"#EF4444",marginTop:3}}>⚠️ يجب أن يكون البريد بدومين @as.edu.sa (مثال: name@as.edu.sa)</div>}</div>
    <div><label style={lS}>🪪 رقم الهوية *</label><input value={f.nationalId} onChange={e=>set("nationalId",e.target.value.replace(/\D/g,"").slice(0,10))} inputMode="numeric" placeholder="10 أرقام" style={{...iS,border:`1px solid ${!String(f.nationalId).trim()?"#DDE9F5":nationalIdOk?"#10B98160":"#EF444460"}`}}/>
    {String(f.nationalId).trim()&&!nationalIdOk&&<div style={{fontSize:9,color:"#EF4444",marginTop:3}}>⚠️ رقم الهوية يجب أن يكون 10 أرقام</div>}</div>
+   <div><label style={lS}>🔢 الرقم الوظيفي</label><input value={f.jobNumber||""} onChange={e=>set("jobNumber",e.target.value.replace(/\D/g,"").slice(0,6))} inputMode="numeric" placeholder="4 أو 5 أرقام" style={iS}/></div>
    <div><label style={lS}>المسمّى الوظيفي *</label>
    <select value={f.job} onChange={e=>set("job",e.target.value)} style={iS}>
    <option value="">— اختر المسمّى —</option>
@@ -2410,7 +2507,7 @@ function RequestAccountForm({ user, onSubmit }) {
    ⚠️ لإرسال الطلب، استكمل: {missing.join("، ")}
    </div>
    )}
-   <button onClick={()=>{ if(canSubmit){ onSubmit({...f,username:cleanEmail}); setF({name:"",username:"",nationalId:"",password:"",role:"employee",roleSubtype:"",job:"",stage:"",branch:myBranches[0]||""}); } }}
+   <button onClick={()=>{ if(canSubmit){ onSubmit({...f,username:cleanEmail}); setF({name:"",username:"",nationalId:"",jobNumber:"",password:"",role:"employee",roleSubtype:"",job:"",stage:"",branch:myBranches[0]||""}); } }}
    disabled={!canSubmit} style={{width:"100%",marginTop:14,padding:"12px",borderRadius:12,border:"none",background:canSubmit?"linear-gradient(135deg,#DB2777,#EC4899)":"#CBD5E1",color:"#fff",fontWeight:700,fontSize:13,cursor:canSubmit?"pointer":"not-allowed"}}>📨 إرسال الطلب لمدير النظام</button>
   </div>
   );
@@ -2559,6 +2656,23 @@ function BranchManagerPanel({ user, onLogout }) {
   showToast("✅ اعتُمدت خطة الموظف الجديد");
   };
 
+  // الاعتماد النهائي (مدير الفرع) — ضمن سقفه الأوسع؛ يشمل ما تجاوز سقف مدير المرحلة
+  const branchCap = branchMgrCap(user, users);
+  const approveBranchFinance = async (empId, approve) => {
+  const cur = idps[empId]||{};
+  const cost = planCost(cur);
+  if(approve){
+   const already = (users||[]).filter(u=>u.id!==empId && idps[u.id]?.branchFinanceApproved).reduce((s,u)=>s+planCost(idps[u.id]),0);
+   if(already+cost > branchCap){
+    showToast(`⚠️ يتجاوز سقف الفرع (المتبقّي ${(branchCap-already).toLocaleString("en-US")} ريال)`,"#EF4444");
+    return;
+   }
+  }
+  const ni = {...idps,[empId]:{...cur, branchFinanceApproved:approve, branchFinanceBy:approve?user.name:null, branchFinanceAt:approve?new Date().toISOString().split("T")[0]:null, finalApproved:approve}};
+  setIdpsState(ni); await st.set("idps_360c",ni);
+  showToast(approve?`✅ اعتماد نهائي (${cost.toLocaleString("en-US")} ريال)`:"↩ أُلغي الاعتماد النهائي");
+  };
+
   return (
   <div style={{minHeight:"100vh",background:APP_BG,fontFamily:"'El Messiri',sans-serif",direction:"rtl",color:"#1E293B"}}>
    {toast&&<div style={{position:"fixed",top:18,left:"50%",transform:"translateX(-50%)",background:toast.c,color:"#fff",padding:"11px 26px",borderRadius:30,fontWeight:700,fontSize:13,zIndex:9999,boxShadow:`0 8px 28px ${toast.c}55`}}>{toast.msg}</div>}
@@ -2589,8 +2703,10 @@ function BranchManagerPanel({ user, onLogout }) {
   {/* ═══ التبويب 1: متابعة التطور المهني ═══ */}
   {tab==="growth"&&(
   <div>
+   <AnalyticsDashboard scope={branchEmps} evals={evals} idps={idps} impactData={impactData} unitLabel="مرحلة" getUnit={(u)=>u.stage||"—"} fixedMode="growth"/>
+   <div style={{marginTop:20}}>
    <LeaderPlanApprovals user={user} users={users} idps={idps} impactData={impactData} readings={readings}
-   onApprovePlan={approveLeaderPlan} onOpenCard={(t)=>setViewPlanUser(t)}/>
+   onApprovePlan={approveLeaderPlan} onOpenCard={(t)=>setViewPlanUser(t)}/></div>
    {/* قيادات الفرع: متابعة خطط التطور لمدراء المراحل والوكلاء (منفصلين عن الموظفين) */}
    {branchLeaders.length>0&&(
    <div style={{background:"#8B5CF608",border:"1px solid #8B5CF625",borderRadius:20,marginTop:14,marginBottom:8,padding:18}}>
@@ -2643,7 +2759,7 @@ function BranchManagerPanel({ user, onLogout }) {
    }).filter(r=>r.total>0);
    if(rows.length===0) return null;
    return(
-   <details open style={{background:"#F6FFFB",border:"1px solid #C9EFDD",borderRadius:16,marginBottom:14,overflow:"hidden"}}>
+   <details style={{background:"#F6FFFB",border:"1px solid #C9EFDD",borderRadius:16,marginBottom:14,overflow:"hidden"}}>
    <summary style={{padding:"12px 16px",cursor:"pointer",fontSize:13,fontWeight:800,color:"#059669",listStyle:"none"}}>📊 ملخّص التطور المهني حسب المرحلة</summary>
    <div style={{padding:"0 14px 14px"}}>
    {rows.map(r=>(
@@ -2696,7 +2812,8 @@ function BranchManagerPanel({ user, onLogout }) {
   {/* ═══ التبويب 2: متابعة تقييم الأداء ═══ */}
   {tab==="eval"&&(
   <div>
-   <details style={{background:BRAND.cardBg,border:`1px solid ${BRAND.cardBorder}`,borderRadius:20,marginBottom:14,overflow:"hidden",boxShadow:"0 8px 26px rgba(46,127,184,0.10)"}}>
+   <AnalyticsDashboard scope={branchEmps} evals={evals} idps={idps} impactData={impactData} unitLabel="مرحلة" getUnit={(u)=>u.stage||"—"} fixedMode="eval"/>
+   <details style={{background:BRAND.cardBg,border:`1px solid ${BRAND.cardBorder}`,borderRadius:20,margin:"18px 0 14px",overflow:"hidden",boxShadow:"0 8px 26px rgba(46,127,184,0.10)"}}>
    <summary style={{padding:"14px 16px",cursor:"pointer",fontSize:13,fontWeight:800,color:"#2E7FB8",listStyle:"none"}}>📑 تحليل تقييمات موظفي الفرع (اضغط للعرض)</summary>
    <div style={{padding:"0 16px 16px"}}><AggregateReport users={branchEmps} evals={evals} currentUser={user} restrictBranch/></div>
    </details>
@@ -2776,6 +2893,50 @@ function BranchManagerPanel({ user, onLogout }) {
   {/* ═══ التبويب 3: اعتماد الخطط والتعديلات ═══ */}
   {tab==="approve"&&(
   <div>
+   {/* ═══ الاعتماد المالي النهائي (مدير الفرع) ═══ */}
+   {(()=>{
+    // الخطط الجاهزة للاعتماد النهائي: معتمدة فنياً + (معتمدة ماليّاً من مدير المرحلة أو تجاوزت سقفه)
+    const branches = (user.branches&&user.branches.length)?user.branches:(user.branch?[user.branch]:[]);
+    const finalCandidates = (users||[]).filter(u=>{
+     if(!branches.includes(u.branch)) return false;
+     const idp=idps[u.id]; if(!idp?.approved) return false;      // لا بدّ من الاعتماد الفني
+     // يشمل: المعتمدين ماليّاً من مدير المرحلة، + القيادات/المتابعين (يعتمدهم مدير الفرع مباشرة)، + من تجاوز سقف المرحلة
+     return planCost(idp)>0;
+    });
+    const usedBranch = finalCandidates.filter(u=>idps[u.id]?.branchFinanceApproved).reduce((s,u)=>s+planCost(idps[u.id]),0);
+    if(finalCandidates.length===0) return null;
+    return (
+    <div style={{background:"linear-gradient(135deg,#7C3AED12,#7C3AED04)",border:"1px solid #7C3AED30",borderRadius:16,padding:16,marginBottom:16}}>
+    <div style={{fontSize:14,fontWeight:900,color:"#6D28D9",marginBottom:6}}>💰 الاعتماد المالي النهائي</div>
+    <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:12}}>
+    <div style={{background:"#fff",borderRadius:10,padding:"8px 14px",border:"1px solid #7C3AED20"}}><span style={{fontSize:10,color:"#8CA3BD"}}>سقف الفرع: </span><span style={{fontSize:14,fontWeight:900,color:"#6D28D9",fontFamily:MONO}}>{branchCap.toLocaleString("en-US")}</span></div>
+    <div style={{background:"#fff",borderRadius:10,padding:"8px 14px",border:"1px solid #10B98120"}}><span style={{fontSize:10,color:"#8CA3BD"}}>المعتمَد: </span><span style={{fontSize:14,fontWeight:900,color:"#059669",fontFamily:MONO}}>{usedBranch.toLocaleString("en-US")}</span></div>
+    <div style={{background:"#fff",borderRadius:10,padding:"8px 14px",border:"1px solid #2E7FB820"}}><span style={{fontSize:10,color:"#8CA3BD"}}>المتبقّي: </span><span style={{fontSize:14,fontWeight:900,color:"#2E7FB8",fontFamily:MONO}}>{(branchCap-usedBranch).toLocaleString("en-US")}</span></div>
+    </div>
+    <div style={{fontSize:10,color:"#8CA3BD",marginBottom:12,lineHeight:1.7}}>يظهر هنا من اكتمل اعتمادهم الفني (والمالي من مدير المرحلة للمعلمين/الإداريين). يمكنك اعتماد ما تجاوز سقف مدير المرحلة، والقيادات والمتابعين الفنيين يُعتمدون هنا مباشرة.</div>
+    {finalCandidates.map(u=>{
+     const idp=idps[u.id]||{}; const cost=planCost(idp); const done=idp.branchFinanceApproved;
+     const stageFin=idp.financeApproved; const isLeaderOrExt=!underStageFinance(u);
+     const wouldExceed=!done&&(usedBranch+cost>branchCap);
+     return(
+     <div key={u.id} style={{background:"#fff",border:`1px solid ${done?"#10B98130":"#E3EEF9"}`,borderRadius:12,padding:"11px 14px",marginBottom:7,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+     <div style={{flex:1,minWidth:140}}>
+     <div style={{fontWeight:700,fontSize:12,color:"#15385C"}}>{u.name}</div>
+     <div style={{fontSize:10,color:"#8CA3BD"}}>{ROLES_LIST[u.role]}{u.stage?` • ${u.stage}`:""} • {(idp.plan||[]).length} بند
+     {stageFin&&<span style={{color:"#059669",marginRight:6}}>✓ مالي (مرحلة)</span>}
+     {isLeaderOrExt&&<span style={{color:"#7C3AED",marginRight:6}}>قيادي/فني</span>}
+     </div>
+     </div>
+     <div style={{textAlign:"center"}}><div style={{fontSize:9,color:"#8CA3BD"}}>التكلفة</div><div style={{fontSize:15,fontWeight:900,color:"#6D28D9",fontFamily:MONO}}>{cost.toLocaleString("en-US")}</div></div>
+     {done
+      ? <button onClick={()=>approveBranchFinance(u.id,false)} style={{padding:"7px 13px",borderRadius:8,border:"1px solid #EF444430",background:"#EF444410",color:"#EF4444",fontSize:11,cursor:"pointer",fontWeight:700}}>↩ إلغاء</button>
+      : <button onClick={()=>approveBranchFinance(u.id,true)} disabled={wouldExceed} title={wouldExceed?"يتجاوز سقف الفرع":""} style={{padding:"7px 13px",borderRadius:8,border:"none",background:wouldExceed?"#CBD5E1":"linear-gradient(135deg,#6D28D9,#8B5CF6)",color:"#fff",fontSize:11,cursor:wouldExceed?"not-allowed":"pointer",fontWeight:700}}>{wouldExceed?"🔒 يتجاوز السقف":"✅ اعتماد نهائي"}</button>}
+     </div>
+     );
+    })}
+    </div>
+    );
+   })()}
    {newPlans.length>0&&(
    <div style={{background:"#10B9810A",border:"1px solid #10B98135",borderRadius:14,padding:16,marginBottom:16}}>
   <div style={{fontSize:14,fontWeight:900,color:"#059669",marginBottom:4}}>🆕 خطط موظفين جُدد بانتظار الاعتماد ({newPlans.length})</div>
@@ -3634,7 +3795,7 @@ function ExecEvalReport({ users, evals, approvals, locks, onOpenCard }) {
   const stats = scope.map(u=>({u,s:getEmpFullStats(u,evals[u.id]||{})}));
   const withData = stats.filter(x=>x.s?.avg!=null);
   const overall = withData.length? withData.reduce((a,b)=>a+b.s.avg,0)/withData.length : null;
-  const lvDist = {"ممتاز":0,"جيد جداً":0,"جيد":0,"مقبول":0,"ضعيف":0};
+  const lvDist = {"يفوق التوقعات":0,"ممتاز":0,"جيد جداً":0,"جيد":0,"دون التوقعات":0};
   withData.forEach(x=>{ const l=getLevel(x.s.avg).label; if(l in lvDist) lvDist[l]++; });
   const partyComp = {};
   EVAL_PARTIES.forEach(p=>{
@@ -3649,7 +3810,7 @@ function ExecEvalReport({ users, evals, approvals, locks, onOpenCard }) {
   return {total:scope.length, withData:withData.length, overall, lvDist, partyComp, byBranch, approvedStages:apKeys.length};
   },[scope,evals,branches,emps,approvals]);
 
-  const lvColors = {"ممتاز":"#10B981","جيد جداً":"#3B82F6","جيد":"#F59E0B","مقبول":"#F97316","ضعيف":"#EF4444"};
+  const lvColors = {"يفوق التوقعات":"#10B981","ممتاز":"#3B82F6","جيد جداً":"#F59E0B","جيد":"#F97316","دون التوقعات":"#EF4444"};
 
   return(
   <div style={{background:BRAND.cardBg,border:`1px solid ${BRAND.cardBorder}`,borderRadius:22,padding:22,boxShadow:"0 8px 30px rgba(46,127,184,0.10)"}}>
@@ -3999,13 +4160,288 @@ function ExecGrowthReport({ users, idps, approvals, impactData, onOpenPlan }) {
   );
 }
 
+// ═══════════════════════════════════════════════════════════
+// لوحة المعلومات البصرية (Dashboard) — رسوم SVG خفيفة بلا مكتبات
+// ═══════════════════════════════════════════════════════════
+
+// بطاقة مؤشّر علوية (KPI)
+function KpiCard({ label, value, sub, color, icon, trend }) {
+  return (
+  <div style={{background:"#fff",border:`1px solid ${color}22`,borderRadius:18,padding:"16px 18px",boxShadow:`0 6px 20px ${color}10`,position:"relative",overflow:"hidden"}}>
+   <div style={{position:"absolute",top:-18,left:-18,width:70,height:70,borderRadius:"50%",background:`${color}0D`}}/>
+   <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,position:"relative"}}>
+   <div style={{width:34,height:34,borderRadius:10,background:`${color}15`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17}}>{icon}</div>
+   <div style={{fontSize:11,color:"#5B7A9E",fontWeight:700,lineHeight:1.3}}>{label}</div>
+   </div>
+   <div style={{fontSize:28,fontWeight:900,color:color,fontFamily:MONO,lineHeight:1,position:"relative"}}>{value}</div>
+   {sub&&<div style={{fontSize:10,color:"#8CA3BD",marginTop:6}}>{sub}</div>}
+  </div>
+  );
+}
+
+// رسم حلقي (Donut) — value 0..100
+function DashDonut({ percent, color, label, sub, size=140 }) {
+  const r = size/2 - 14, cx = size/2, cy = size/2, circ = 2*Math.PI*r;
+  const pct = Math.max(0,Math.min(100,percent||0));
+  const dash = (pct/100)*circ;
+  return (
+  <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+   <svg width={size} height={size} style={{transform:"rotate(-90deg)"}}>
+   <circle cx={cx} cy={cy} r={r} fill="none" stroke="#EEF4FB" strokeWidth={12}/>
+   <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={12} strokeLinecap="round"
+    strokeDasharray={`${dash} ${circ-dash}`} style={{transition:"stroke-dasharray 0.6s ease"}}/>
+   </svg>
+   <div style={{marginTop:-size/2-8,marginBottom:size/2-24,textAlign:"center",transform:"translateY("+(size/2-14)+"px)"}}>
+   <div style={{fontSize:size*0.2,fontWeight:900,color:color,fontFamily:MONO,lineHeight:1}}>{Math.round(pct)}<span style={{fontSize:size*0.11}}>%</span></div>
+   </div>
+   {label&&<div style={{fontSize:12,fontWeight:800,color:"#15385C",marginTop:2}}>{label}</div>}
+   {sub&&<div style={{fontSize:10,color:"#8CA3BD",marginTop:1}}>{sub}</div>}
+  </div>
+  );
+}
+
+// رسم أعمدة أفقية (لكل فرع/وحدة)
+function HBarChart({ data, color, maxOverride, unit="%" }) {
+  const max = maxOverride || Math.max(1,...data.map(d=>d.value));
+  return (
+  <div style={{display:"flex",flexDirection:"column",gap:9}}>
+   {data.map((d,i)=>(
+   <div key={i} style={{display:"flex",alignItems:"center",gap:10}}>
+   <div style={{width:110,fontSize:11,color:"#5B7A9E",fontWeight:700,textAlign:"left",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={d.label}>{d.label}</div>
+   <div style={{flex:1,height:22,background:"#F4F9FE",borderRadius:8,overflow:"hidden",position:"relative"}}>
+   <div style={{height:"100%",width:`${(d.value/max)*100}%`,background:`linear-gradient(90deg,${d.color||color},${d.color||color}bb)`,borderRadius:8,transition:"width 0.6s ease",minWidth:d.value>0?4:0}}/>
+   </div>
+   <div style={{width:52,fontSize:12,fontWeight:900,color:d.color||color,fontFamily:MONO,textAlign:"left"}}>{typeof d.value==="number"?(unit==="%"?Math.round(d.value):d.value.toLocaleString("en-US")):d.value}{unit==="%"?"%":""}</div>
+   </div>
+   ))}
+   {data.length===0&&<div style={{textAlign:"center",padding:16,color:"#8CA3BD",fontSize:11}}>لا بيانات</div>}
+  </div>
+  );
+}
+
+// رسم أعمدة عمودية (توزيع)
+function VBarChart({ data, height=150 }) {
+  const max = Math.max(1,...data.map(d=>d.value));
+  return (
+  <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-around",gap:8,height,padding:"0 4px"}}>
+   {data.map((d,i)=>(
+   <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:6,height:"100%",justifyContent:"flex-end"}}>
+   <div style={{fontSize:12,fontWeight:900,color:d.color,fontFamily:MONO}}>{d.value}</div>
+   <div style={{width:"100%",maxWidth:46,height:`${(d.value/max)*100}%`,minHeight:d.value>0?6:0,background:`linear-gradient(180deg,${d.color},${d.color}aa)`,borderRadius:"8px 8px 0 0",transition:"height 0.6s ease"}}/>
+   <div style={{fontSize:9,color:"#5B7A9E",fontWeight:700,textAlign:"center",lineHeight:1.2}}>{d.label}</div>
+   </div>
+   ))}
+  </div>
+  );
+}
+
+// رسم خطّي بسيط (اتجاه) — points: [{x,y}]
+function LineChart({ series, height=140, color="#2E7FB8", labels }) {
+  const w=320, pad=10;
+  const all=series.flatMap(s=>s.values);
+  const max=Math.max(1,...all), min=Math.min(0,...all);
+  const range=max-min||1;
+  const xStep=(w-pad*2)/Math.max(1,(series[0]?.values.length||1)-1);
+  const toXY=(v,i)=>[pad+i*xStep, height-pad-((v-min)/range)*(height-pad*2)];
+  return (
+  <svg viewBox={`0 0 ${w} ${height}`} style={{width:"100%",height}}>
+   {[0.25,0.5,0.75].map((f,i)=><line key={i} x1={pad} y1={pad+f*(height-pad*2)} x2={w-pad} y2={pad+f*(height-pad*2)} stroke="#EEF4FB" strokeWidth={1}/>)}
+   {series.map((s,si)=>{
+   const pts=s.values.map((v,i)=>toXY(v,i));
+   const path=pts.map((p,i)=>(i===0?"M":"L")+p[0].toFixed(1)+","+p[1].toFixed(1)).join(" ");
+   const area=path+` L${pts[pts.length-1][0].toFixed(1)},${height-pad} L${pts[0][0].toFixed(1)},${height-pad} Z`;
+   return (<g key={si}>
+    <path d={area} fill={`${s.color||color}12`}/>
+    <path d={path} fill="none" stroke={s.color||color} strokeWidth={2.5} strokeLinejoin="round"/>
+    {pts.map((p,i)=><circle key={i} cx={p[0]} cy={p[1]} r={3} fill={s.color||color}/>)}
+   </g>);
+   })}
+  </svg>
+  );
+}
+
+// قسم رسم بعنوان
+function ChartCard({ title, icon, color, children, right, span }) {
+  return (
+  <div style={{background:"#fff",border:"1px solid #E8F0F9",borderRadius:18,padding:18,boxShadow:"0 4px 16px rgba(46,127,184,0.06)",gridColumn:span?`span ${span}`:undefined}}>
+   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,flexWrap:"wrap",gap:8}}>
+   <div style={{display:"flex",alignItems:"center",gap:8}}>
+   <span style={{fontSize:16}}>{icon}</span>
+   <span style={{fontSize:13,fontWeight:900,color:"#15385C"}}>{title}</span>
+   </div>
+   {right}
+   </div>
+   {children}
+  </div>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════
+// AnalyticsDashboard — لوحة معلومات ذكية تتكيّف مع النطاق
+// scope: مصفوفة المستخدمين ضمن نطاق الحساب
+// mode: "growth" | "eval"
+// ═══════════════════════════════════════════════════════════
+function AnalyticsDashboard({ scope, evals, idps, impactData, unitLabel="فرع", getUnit, fixedMode }) {
+  const [modeS,setMode] = useState(fixedMode||"growth");
+  const mode = fixedMode || modeS;
+  const [unitFilter,setUnitFilter] = useState("");
+
+  // تحديد وحدة كل شخص (فرع أو إدارة)
+  const unitOf = getUnit || ((u)=>u.branch||"—");
+  const units = [...new Set((scope||[]).map(unitOf).filter(Boolean))].sort();
+  const visScope = (scope||[]).filter(u=>!unitFilter||unitOf(u)===unitFilter);
+  const n = visScope.length;
+
+  // ═══ حسابات التطور المهني ═══
+  const growthStats = useMemo(()=>{
+   const planned=visScope.filter(u=>(idps[u.id]?.plan||[]).length>0).length;
+   const approved=visScope.filter(u=>idps[u.id]?.approved).length;
+   const totalRows=visScope.reduce((s,u)=>s+((idps[u.id]?.plan||[]).length),0);
+   const execRows=visScope.reduce((s,u)=>s+((idps[u.id]?.plan||[]).filter(r=>r.status==="تم التنفيذ").length),0);
+   const measRows=visScope.reduce((s,u)=>{ return s+((idps[u.id]?.plan||[]).filter(r=>{const im=impactData?.[`${u.id}__${r.id}`];return im&&(im.before!=null||im.after!=null||im.note);}).length); },0);
+   const budget=visScope.reduce((s,u)=>s+planCost(idps[u.id]),0);
+   const approvedBudget=visScope.filter(u=>idps[u.id]?.financeApproved||idps[u.id]?.branchFinanceApproved).reduce((s,u)=>s+planCost(idps[u.id]),0);
+   const completedPlans=visScope.filter(u=>{const p=idps[u.id]?.plan||[];return p.length>0&&p.every(r=>r.status==="تم التنفيذ");}).length;
+   const pct=(x)=>n?Math.round((x/n)*100):0;
+   const rpct=(x)=>totalRows?Math.round((x/totalRows)*100):0;
+   // لكل وحدة
+   const byUnit=units.map(unit=>{
+    const us=visScope.filter(u=>unitOf(u)===unit); const un=us.length;
+    const pl=us.filter(u=>(idps[u.id]?.plan||[]).length>0).length;
+    const ap=us.filter(u=>idps[u.id]?.approved).length;
+    const tr=us.reduce((s,u)=>s+((idps[u.id]?.plan||[]).length),0);
+    const ex=us.reduce((s,u)=>s+((idps[u.id]?.plan||[]).filter(r=>r.status==="تم التنفيذ").length),0);
+    return {label:unit,count:un,planPct:un?Math.round(pl/un*100):0,apprPct:un?Math.round(ap/un*100):0,execPct:tr?Math.round(ex/tr*100):0};
+   });
+   return {planned,approved,totalRows,execRows,measRows,budget,approvedBudget,completedPlans,pct,rpct,byUnit};
+  },[visScope,idps,impactData,units.join()]);
+
+  // ═══ حسابات تقييم الأداء ═══
+  const evalStats = useMemo(()=>{
+   const rows=visScope.map(u=>({u,st:getEmpFullStats(u,evals[u.id]||{})}));
+   const evaluated=rows.filter(r=>r.st?.avg!=null).length;
+   const scores=rows.map(r=>r.st?.avg).filter(x=>x!=null);
+   const avg=scores.length?scores.reduce((a,b)=>a+b,0)/scores.length:null;
+   // الانحراف المعياري
+   const sd=scores.length>1?Math.sqrt(scores.reduce((s,x)=>s+Math.pow(x-avg,2),0)/scores.length):0;
+   // توزيع المستويات
+   const levels={"يفوق التوقعات":0,"ممتاز":0,"جيد جداً":0,"جيد":0,"دون التوقعات":0};
+   scores.forEach(x=>{const l=getLevel(x).label; if(levels[l]!=null)levels[l]++;});
+   // متوسّط كل طرف
+   const partyAvg={};
+   EVAL_PARTIES.forEach(p=>{const v=rows.map(r=>r.st?.partyScores?.[p.key]?.avg).filter(x=>x!=null); partyAvg[p.key]=v.length?v.reduce((a,b)=>a+b,0)/v.length:null;});
+   // لكل وحدة
+   const byUnit=units.map(unit=>{
+    const us=rows.filter(r=>unitOf(r.u)===unit);
+    const sc=us.map(r=>r.st?.avg).filter(x=>x!=null);
+    const a=sc.length?sc.reduce((x,y)=>x+y,0)/sc.length:null;
+    return {label:unit,count:us.length,avg:a,evalPct:us.length?Math.round(sc.length/us.length*100):0};
+   });
+   const pct=(x)=>n?Math.round((x/n)*100):0;
+   return {evaluated,avg,sd,levels,partyAvg,byUnit,pct};
+  },[visScope,evals,units.join()]);
+
+  const C={growth:"#10B981",eval:"#2E7FB8"};
+  const col=C[mode];
+
+  return (
+  <div>
+   {/* تبديل النمط (يختفي عند الدمج) + الفلتر */}
+   <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
+   {!fixedMode&&[{k:"growth",l:"🎯 التطور المهني",c:"#10B981"},{k:"eval",l:"📊 تقييم الأداء",c:"#2E7FB8"}].map(t=>(
+   <button key={t.k} onClick={()=>setMode(t.k)} style={{padding:"10px 20px",borderRadius:24,border:"none",background:mode===t.k?`linear-gradient(135deg,${t.c},${t.c}cc)`:"#fff",color:mode===t.k?"#fff":"#5B7A9E",fontSize:13,fontWeight:800,cursor:"pointer",boxShadow:mode===t.k?`0 6px 18px ${t.c}45`:"0 2px 8px rgba(46,127,184,0.08)"}}>{t.l}</button>
+   ))}
+   {fixedMode&&<div style={{fontSize:14,fontWeight:900,color:mode==="growth"?"#10B981":"#2E7FB8"}}>{mode==="growth"?"🎯 لوحة متابعة التطور المهني":"📊 لوحة متابعة تقييم الأداء"}</div>}
+   <div style={{flex:1}}/>
+   {units.length>1&&(
+   <select value={unitFilter} onChange={e=>setUnitFilter(e.target.value)} style={{padding:"9px 14px",borderRadius:12,border:"1px solid #DDE9F5",background:"#fff",color:"#15385C",fontSize:12,fontWeight:700}}>
+   <option value="">كل {unitLabel==="فرع"?"الفروع والإدارات":unitLabel}</option>
+   {units.map(u=><option key={u} value={u}>{u}</option>)}
+   </select>
+   )}
+   </div>
+
+   <div style={{fontSize:11,color:"#8CA3BD",marginBottom:14}}>
+   يعرض {n} شخصاً {unitFilter?`في ${unitFilter}`:`عبر ${units.length} ${unitLabel==="فرع"?"فرع/إدارة":unitLabel}`} • آخر تحديث: {new Date().toLocaleDateString("ar-SA")}
+   </div>
+
+   {mode==="growth"?(
+   <>
+   {/* بطاقات KPI */}
+   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12,marginBottom:16}}>
+   <KpiCard label="نسبة التخطيط" value={growthStats.pct(growthStats.planned)+"%"} sub={`${growthStats.planned} من ${n}`} color="#10B981" icon="📋"/>
+   <KpiCard label="نسبة الاعتماد" value={growthStats.pct(growthStats.approved)+"%"} sub={`${growthStats.approved} خطة معتمدة`} color="#2E7FB8" icon="✅"/>
+   <KpiCard label="نسبة التنفيذ" value={growthStats.rpct(growthStats.execRows)+"%"} sub={`${growthStats.execRows} من ${growthStats.totalRows} بند`} color="#F59E0B" icon="⚡"/>
+   <KpiCard label="قياس الأثر" value={growthStats.rpct(growthStats.measRows)+"%"} sub={`${growthStats.measRows} بند مقيس`} color="#8B5CF6" icon="📈"/>
+   <KpiCard label="خطط مكتملة" value={growthStats.completedPlans} sub={`من ${n} خطة`} color="#0891B2" icon="🏆"/>
+   <KpiCard label="الميزانية المعتمدة" value={growthStats.approvedBudget.toLocaleString("en-US")} sub={`من ${growthStats.budget.toLocaleString("en-US")} ريال`} color="#6D28D9" icon="💰"/>
+   </div>
+
+   {/* الرسوم */}
+   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))",gap:14}}>
+   <ChartCard title="مؤشّرات التطوّر العامة" icon="🎯" color="#10B981">
+   <div style={{display:"flex",justifyContent:"space-around",flexWrap:"wrap",gap:10}}>
+   <DashDonut percent={growthStats.pct(growthStats.planned)} color="#10B981" label="التخطيط" size={120}/>
+   <DashDonut percent={growthStats.rpct(growthStats.execRows)} color="#F59E0B" label="التنفيذ" size={120}/>
+   <DashDonut percent={growthStats.rpct(growthStats.measRows)} color="#8B5CF6" label="قياس الأثر" size={120}/>
+   </div>
+   </ChartCard>
+
+   <ChartCard title={`نسبة التنفيذ حسب ${unitLabel==="فرع"?"الفرع/الإدارة":unitLabel}`} icon="🏛️" color="#10B981">
+   <HBarChart data={growthStats.byUnit.map(u=>({label:u.label,value:u.execPct}))} color="#10B981" maxOverride={100}/>
+   </ChartCard>
+
+   <ChartCard title="التخطيط والاعتماد حسب الوحدة" icon="📊" color="#2E7FB8" span={2}>
+   <HBarChart data={growthStats.byUnit.map(u=>({label:u.label+` (${u.count})`,value:u.planPct}))} color="#2E7FB8" maxOverride={100}/>
+   </ChartCard>
+   </div>
+   </>
+   ):(
+   <>
+   {/* بطاقات KPI للتقييم */}
+   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12,marginBottom:16}}>
+   <KpiCard label="اكتمال التقييم" value={evalStats.pct(evalStats.evaluated)+"%"} sub={`${evalStats.evaluated} من ${n}`} color="#2E7FB8" icon="✅"/>
+   <KpiCard label="متوسّط الأداء العام" value={evalStats.avg!=null?evalStats.avg.toFixed(2):"—"} sub={evalStats.avg!=null?getLevel(evalStats.avg).label:"لم يُقيّم"} color={evalStats.avg!=null?getLevel(evalStats.avg).color:"#8CA3BD"} icon="⭐"/>
+   <KpiCard label="الانحراف المعياري" value={evalStats.sd.toFixed(2)} sub="تباعد الأداء" color="#F59E0B" icon="📐"/>
+   <KpiCard label="مكتملو التقييم" value={evalStats.evaluated} sub={`من ${n} موظف`} color="#0891B2" icon="👥"/>
+   </div>
+
+   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))",gap:14}}>
+   <ChartCard title="توزيع مستويات الأداء" icon="📊" color="#2E7FB8">
+   <VBarChart data={[
+    {label:"يفوق",value:evalStats.levels["يفوق التوقعات"],color:"#10B981"},
+    {label:"ممتاز",value:evalStats.levels["ممتاز"],color:"#3B82F6"},
+    {label:"جيد جداً",value:evalStats.levels["جيد جداً"],color:"#F59E0B"},
+    {label:"جيد",value:evalStats.levels["جيد"],color:"#F97316"},
+    {label:"دون",value:evalStats.levels["دون التوقعات"],color:"#EF4444"},
+   ]}/>
+   </ChartCard>
+
+   <ChartCard title="متوسّط الأداء حسب الطرف المُقيّم" icon="🤝" color="#8B5CF6">
+   <HBarChart unit="" maxOverride={5} data={EVAL_PARTIES.filter(p=>evalStats.partyAvg[p.key]!=null).map(p=>({label:p.label,value:+evalStats.partyAvg[p.key].toFixed(2),color:p.color}))} color="#8B5CF6"/>
+   <div style={{fontSize:9,color:"#8CA3BD",marginTop:8,textAlign:"center"}}>المتوسّط من 5</div>
+   </ChartCard>
+
+   <ChartCard title={`متوسّط الأداء حسب ${unitLabel==="فرع"?"الفرع/الإدارة":unitLabel}`} icon="🏛️" color="#2E7FB8" span={2}>
+   <HBarChart unit="" maxOverride={5} data={evalStats.byUnit.filter(u=>u.avg!=null).map(u=>({label:u.label+` (${u.count})`,value:+u.avg.toFixed(2),color:getLevel(u.avg).color}))} color="#2E7FB8"/>
+   <div style={{fontSize:9,color:"#8CA3BD",marginTop:8,textAlign:"center"}}>المتوسّط من 5 — اكتمال التقييم يظهر بعدد الأشخاص</div>
+   </ChartCard>
+   </div>
+   </>
+   )}
+  </div>
+  );
+}
+
+
 function AdminPanel({ onLogout }) {
   const [tab,setTab] = useState("users");
   const [users,setUsersState] = useState([]);
   const [evals,setEvalsState] = useState({});
   const [idps,setIdpsState] = useState({});
   const [acctRequests,setAcctRequests] = useState([]); // ج-1
-  const [form,setForm] = useState({name:"",username:"",password:"",role:"employee",job:"",branch:"",stage:"",nationalId:"",supervisorId:"",stageManagerId:"",peerId:""});
+  const [form,setForm] = useState({name:"",username:"",password:"",role:"employee",job:"",branch:"",stage:"",nationalId:"",jobNumber:"",supervisorId:"",stageManagerId:"",peerId:""});
   const [toast,setToast] = useState(null);
   const [viewUser,setViewUser] = useState(null);
   const [viewPlanUser,setViewPlanUser] = useState(null);
@@ -4026,6 +4462,7 @@ function AdminPanel({ onLogout }) {
   const [approvals,setApprovals] = useState({});
   const [readings,setReadings] = useState({});
   const [locks,setLocks] = useState({});
+  const [impactData,setImpactData] = useState({});
 
   const showToast = (msg,c="#10B981") => { setToast({msg,c}); setTimeout(()=>setToast(null),2500); };
 
@@ -4035,6 +4472,7 @@ function AdminPanel({ onLogout }) {
   st.get("evals_360c").then(d=>setEvalsState(d||{}));
   st.get("idps_360c").then(d=>setIdpsState(d||{}));
   st.get("approvals_360c").then(d=>setApprovals(d||{}));
+  st.get("impact_360c").then(d=>setImpactData(d||{}));
   st.get("evalwindow_360c").then(d=>{ if(d) setEvalWindowState(d); });
   st.get("round2_360c").then(d=>{ if(d) setRound2State(d); });
   st.get("acctRequests_360c").then(d=>setAcctRequests(Array.isArray(d)?d:[]));
@@ -4059,6 +4497,47 @@ function AdminPanel({ onLogout }) {
   const supervisors = (users||[]).filter(u=>u.role==="supervisor");
   const stageMgrs   = (users||[]).filter(u=>u.role==="stage_mgr");
   const employees   = (users||[]).filter(u=>u.role==="employee");
+
+  // استيراد جماعي للموظفين (معلم/إداري فقط) — لصق من Excel: الاسم | البريد | كلمة المرور | الفرع | المرحلة | المسمّى | الرقم الوظيفي | الهوية
+  const [showEmpImport,setShowEmpImport] = useState(false);
+  const [empImportTxt,setEmpImportTxt] = useState("");
+  const [empImportReport,setEmpImportReport] = useState(null);
+  const handleEmpImport = async () => {
+   const txt=(empImportTxt||"").trim();
+   if(!txt){ setEmpImportReport({error:"الرجاء لصق البيانات."}); return; }
+   if(/Ø|Ù|Ã|Â/.test(txt) && (txt.match(/[Ø|Ù]/g)||[]).length>5){ setEmpImportReport({error:"⚠️ النصّ مشوّه الترميز. انسخ من Excel والصق مباشرةً بدل CSV."}); return; }
+   const norm=(s)=>String(s||"").replace(/\s+/g," ").trim();
+   const lines=txt.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+   // تخطّي صفّ العناوين إن وُجد
+   const start = /الاسم|البريد|اسم المستخدم/.test(lines[0]) ? 1 : 0;
+   const branchNorm={}; BRANCHES_LIST.forEach(b=>branchNorm[norm(b)]=b);
+   const stageNorm={}; STAGES.forEach(s=>stageNorm[norm(s)]=s);
+   let ok=0, created=[], errors=[];
+   const existing = new Set((users||[]).map(u=>u.username));
+   for(let i=start;i<lines.length;i++){
+    const cells=lines[i].split(/\t|,،/).map(norm);
+    const [name,username,password,branchRaw,stageRaw,jobRaw,jobNumber,nationalId]=cells;
+    if(!name||!username){ errors.push(`سطر ${i+1}: الاسم والبريد مطلوبان`); continue; }
+    const cleanU=String(username).replace(/[\u200B-\u200F\u202A-\u202E\uFEFF]/g,"").trim();
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanU)){ errors.push(`سطر ${i+1} (${name}): بريد غير صحيح`); continue; }
+    if(existing.has(cleanU)){ errors.push(`سطر ${i+1} (${name}): البريد مستخدم`); continue; }
+    // مطابقة الفرع والمرحلة مع القوائم (حلّ مشكلة القوائم المنسدلة)
+    const branch = branchNorm[norm(branchRaw)] || branchRaw;
+    const stage = stageNorm[norm(stageRaw)] || stageRaw || "";
+    const job = jobRaw || "معلم";
+    const newU={ name, username:cleanU, password:password||"Andalus@123", role:"employee", roleSubtype:"",
+      job, branch, stage, jobNumber:jobNumber||"", nationalId:nationalId||"", peerIds:[] };
+    try{
+     if(typeof window.andlusAPI?.createUser==="function") await window.andlusAPI.createUser(newU);
+     created.push(newU); existing.add(cleanU); ok++;
+    }catch(e){ errors.push(`سطر ${i+1} (${name}): ${e?.message||"تعذّر الإنشاء"}`); }
+   }
+   if(created.length){
+    try{ await persistUsers([...(users||[]),...created]); const fresh=await st.get("users_360c"); if(Array.isArray(fresh)) setUsersState(fresh); }catch(e){}
+   }
+   setEmpImportReport({ ok, total:lines.length-start, errors:errors.slice(0,25), errorsTotal:errors.length });
+   if(ok) showToast(`✓ أُنشئ ${ok} حساباً`);
+  };
 
   const addUser = async () => {
   if (!form.name||!form.username||!form.password||!form.branch) return;
@@ -4132,7 +4611,7 @@ function AdminPanel({ onLogout }) {
   </div>
   <div style={{display:"flex",gap:5}}>
 
-   {[{k:"users",i:"👥",l:"الحسابات",c:"#EC4899"},{k:"evals",i:"📊",l:"تقييم الأداء",c:"#8B5CF6"},{k:"report",i:"🎯",l:"التطور المهني",c:"#06B6D4"},{k:"competencies",i:"🗂️",l:"مصفوفة الجدارات",c:"#F59E0B"},{k:"library",i:"📖",l:"مكتبة المصادر",c:"#10B981"}].map(t=>(
+   {[{k:"users",i:"👥",l:"الحسابات",c:"#EC4899"},{k:"evals",i:"📊",l:"متابعة تقييم الأداء",c:"#8B5CF6"},{k:"report",i:"🎯",l:"متابعة التطور المهني",c:"#06B6D4"},{k:"competencies",i:"🗂️",l:"مصفوفة الجدارات",c:"#F59E0B"},{k:"library",i:"📖",l:"مكتبة المصادر",c:"#10B981"}].map(t=>(
    <button key={t.k} onClick={()=>setTab(t.k)} style={{display:"flex",alignItems:"center",gap:7,padding:"8px 16px",borderRadius:24,border:"none",background:tab===t.k?`linear-gradient(135deg,${t.c},${t.c}cc)`:"#fff",color:tab===t.k?"#fff":"#5B7A9E",fontSize:12,fontWeight:tab===t.k?800:600,cursor:"pointer",boxShadow:tab===t.k?`0 6px 18px ${t.c}45`:"0 2px 8px rgba(46,127,184,0.08)"}}>
   <span style={{fontSize:14}}>{t.i}</span>{t.l}
    </button>
@@ -4169,9 +4648,12 @@ function AdminPanel({ onLogout }) {
   <div style={{display:"grid",gridTemplateColumns:"360px 1fr",gap:16}}>
    {/* نموذج الإضافة */}
    <div style={{background:BRAND.cardBg,border:`1px solid ${BRAND.cardBorder}`,borderRadius:20,boxShadow:"0 8px 26px rgba(46,127,184,0.10)",padding:20,height:"fit-content"}}>
-   <div style={{fontSize:13,color:"#2E7FB8",fontWeight:800,marginBottom:14}}>➕ إضافة حساب</div>
+   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,gap:8,flexWrap:"wrap"}}>
+   <div style={{fontSize:13,color:"#2E7FB8",fontWeight:800}}>➕ إضافة حساب</div>
+   <button onClick={()=>{setShowEmpImport(true);setEmpImportReport(null);}} style={{padding:"7px 12px",borderRadius:9,border:"none",background:"linear-gradient(135deg,#059669,#10B981)",color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}} title="استيراد معلمين/إداريين دفعة واحدة من Excel">📥 استيراد معلمين/إداريين</button>
+   </div>
    <div style={{display:"flex",flexDirection:"column",gap:9}}>
-  {[{l:"الاسم *",k:"name"},{l:"اسم المستخدم *",k:"username"},{l:"كلمة المرور *",k:"password",t:"password"},{l:"🪪 رقم الهوية",k:"nationalId",ph:"رقم الهوية الوطنية"}].map(f=>(
+  {[{l:"الاسم *",k:"name"},{l:"اسم المستخدم *",k:"username"},{l:"كلمة المرور *",k:"password",t:"password"},{l:"🪪 رقم الهوية",k:"nationalId",ph:"رقم الهوية الوطنية"},{l:"🔢 الرقم الوظيفي",k:"jobNumber",ph:"4 أو 5 أرقام"}].map(f=>(
   <div key={f.k}>
   <label style={{display:"block",fontSize:11,color:"#5B7A9E",marginBottom:4,fontWeight:700}}>{f.l}</label>
   <input value={form[f.k]||""} type={f.t||"text"} onChange={e=>setForm(p=>({...p,[f.k]:e.target.value}))}
@@ -4458,12 +4940,18 @@ function AdminPanel({ onLogout }) {
    <div style={{padding:"0 16px 16px"}}><WeightsEditor onSaved={()=>showToast("✓ حُفظت الأوزان")}/></div>
    </details>
 
-   {/* ب) التقرير التنفيذي */}
+   {/* لوحة معلومات متابعة تقييم الأداء (رسوم بيانية) */}
+   <AnalyticsDashboard scope={(users||[]).filter(u=>u.role!=="admin")} evals={evals} idps={idps} impactData={impactData} unitLabel="فرع" getUnit={(u)=>u.branch||"—"} fixedMode="eval"/>
+
+   {/* ب) التقرير التنفيذي التفصيلي */}
    <ExecEvalReport users={users||[]} evals={evals} approvals={approvals} locks={locks} onOpenCard={(u)=>setViewUser(u)}/>
   </div>
   )}
   {tab==="report"&&(
-  <ExecGrowthReport users={users||[]} idps={idps} approvals={approvals} impactData={{}} onOpenPlan={(u)=>setViewPlanUser(u)}/>
+  <>
+  <AnalyticsDashboard scope={(users||[]).filter(u=>u.role!=="admin")} evals={evals} idps={idps} impactData={impactData} unitLabel="فرع" getUnit={(u)=>u.branch||"—"} fixedMode="growth"/>
+  <div style={{marginTop:20}}><ExecGrowthReport users={users||[]} idps={idps} approvals={approvals} impactData={impactData} onOpenPlan={(u)=>setViewPlanUser(u)}/></div>
+  </>
   )}
   {tab==="library"&&(<>
   <LibraryManager
@@ -4503,9 +4991,40 @@ function AdminPanel({ onLogout }) {
    </div>
    )}
 
+   {showEmpImport&&(
+  <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:800,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+  <div style={{background:"#FFFFFF",border:"1px solid #10B98140",borderRadius:20,width:"100%",maxWidth:680,maxHeight:"90vh",overflowY:"auto",padding:24,direction:"rtl"}}>
+   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+   <span style={{fontSize:17,fontWeight:900,color:"#15385C"}}>📥 استيراد معلمين / إداريين</span>
+   <button onClick={()=>{setShowEmpImport(false);setEmpImportTxt("");setEmpImportReport(null);}} style={{background:"none",border:"none",color:"#5B7A9E",fontSize:20,cursor:"pointer"}}>✕</button>
+   </div>
+   <div style={{background:"#ECFDF5",borderRadius:10,padding:"12px 14px",marginBottom:12,fontSize:12,color:"#065F46",lineHeight:1.9}}>
+   <strong>للمعلمين والإداريين فقط.</strong> انسخ الأعمدة من Excel والصقها مباشرةً (بترتيب الأعمدة):<br/>
+   <code style={{display:"block",background:"#fff",padding:"8px 10px",borderRadius:6,marginTop:4,color:"#334155",fontSize:11}}>الاسم ⟨tab⟩ البريد ⟨tab⟩ كلمة المرور ⟨tab⟩ الفرع ⟨tab⟩ المرحلة ⟨tab⟩ المسمّى ⟨tab⟩ الرقم الوظيفي ⟨tab⟩ رقم الهوية</code>
+   <div style={{marginTop:8,fontSize:11}}>✓ الفرع والمرحلة يُطابَقان تلقائياً مع قوائم النظام (حلّ مشكلة القوائم المنسدلة) • ✓ إن تُركت كلمة المرور فارغة تُستخدم <code>Andalus@123</code> • ✓ المسمّى الافتراضي «معلم» • ✓ انسخ من Excel لا CSV لتفادي مشاكل الترميز.</div>
+   </div>
+   <textarea value={empImportTxt} onChange={e=>setEmpImportTxt(e.target.value)} rows={10} placeholder="أحمد محمد⟨tab⟩ahmad@as.edu.sa⟨tab⟩⟨tab⟩أندلس الزهراء بنين⟨tab⟩ابتدائي⟨tab⟩معلم⟨tab⟩1234⟨tab⟩1012345678"
+   style={{width:"100%",padding:"10px",background:"#F4F9FE",border:"1px solid #C7DBF0",borderRadius:8,color:"#1E293B",fontFamily:"monospace",fontSize:12,boxSizing:"border-box",resize:"vertical",direction:"rtl"}}/>
+   {empImportReport&&empImportReport.error&&<div style={{color:"#EF4444",fontSize:12,marginTop:8,background:"#EF444412",padding:"8px 12px",borderRadius:8}}>{empImportReport.error}</div>}
+   {empImportReport&&empImportReport.ok!=null&&(
+   <div style={{marginTop:10,background:"#F0FDF4",border:"1px solid #86EFAC",borderRadius:10,padding:"12px 14px",fontSize:12,color:"#15803D",lineHeight:1.9}}>
+   ✅ أُنشئ <strong>{empImportReport.ok}</strong> من <strong>{empImportReport.total}</strong> حساباً.
+   {empImportReport.errorsTotal>0&&(
+   <div style={{color:"#B45309",marginTop:6}}>⚠️ {empImportReport.errorsTotal} سطراً لم يُستورَد:<br/>{empImportReport.errors.map((er,i)=><div key={i} style={{fontSize:11}}>• {er}</div>)}{empImportReport.errorsTotal>25?"...":""}</div>
+   )}
+   </div>
+   )}
+   <div style={{display:"flex",gap:10,marginTop:12}}>
+   <button onClick={()=>{setShowEmpImport(false);setEmpImportTxt("");setEmpImportReport(null);}} style={{flex:1,padding:"11px",borderRadius:10,border:"1px solid #C7DBF0",background:"transparent",color:"#5B7A9E",cursor:"pointer",fontWeight:700}}>إغلاق</button>
+   <button onClick={handleEmpImport} disabled={!empImportTxt.trim()} style={{flex:2,padding:"11px",borderRadius:10,border:"none",background:empImportTxt.trim()?"linear-gradient(135deg,#059669,#10B981)":"#DDE9F5",color:empImportTxt.trim()?"#fff":"#334155",fontWeight:700,cursor:empImportTxt.trim()?"pointer":"default"}}>📥 استيراد الحسابات</button>
+   </div>
+  </div>
+  </div>
+   )}
+
    {editUser&&(
-  <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:400,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-  <div style={{background:"#FFFFFF",border:"1px solid #B3D0EA",borderRadius:20,width:"100%",maxWidth:460,padding:28}}>
+   <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:400,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+   <div style={{background:"#FFFFFF",border:"1px solid #B3D0EA",borderRadius:20,width:"100%",maxWidth:460,maxHeight:"90vh",overflowY:"auto",padding:28}}>
    <div style={{display:"flex",justifyContent:"space-between",marginBottom:16}}>
    <span style={{fontWeight:900,color:"#15385C"}}>تعديل: {editUser.name}</span>
    <button onClick={()=>setEditUser(null)} style={{background:"none",border:"none",color:"#5B7A9E",fontSize:20,cursor:"pointer"}}>✕</button>
@@ -4738,6 +5257,12 @@ function SupervisorTeamGrowth({ myTargets, idps, evals, editRequests, approvals,
   onApprove(empId, {...cur, approved:true, approvedBy:user.name, approvedAt:new Date().toISOString().split("T")[0], ...(stagePlansApproved?{needsBranchApproval:true}:{})});
   };
 
+  // إعادة فتح الخطة للموظف للتحرير (إن لم تلقَ قبول المتابع الفني بعد الإنهاء)
+  const reopen = (empId) => {
+  const cur = idps[empId]||{};
+  onApprove(empId, {...cur, isFinal:false, approved:false, reopenedBy:user.name, reopenedAt:new Date().toISOString().split("T")[0]});
+  };
+
   if (!myTargets.length) return <div style={{textAlign:"center",padding:50,color:"#5B7A9E"}}><div style={{fontSize:40,marginBottom:12}}>👥</div>لا يوجد موظفون مرتبطون بك فنياً</div>;
 
   return(
@@ -4783,6 +5308,7 @@ function SupervisorTeamGrowth({ myTargets, idps, evals, editRequests, approvals,
   <div style={{display:"flex",gap:8,flexWrap:"wrap",margin:"14px 0"}}>
   <button onClick={()=>onOpenPlan(u)} style={{padding:"7px 14px",borderRadius:8,border:"1px solid #3B82F640",background:"#3B82F612",color:"#3B82F6",fontSize:11,cursor:"pointer",fontWeight:700}}>👁️ عرض الخطة كاملة</button>
   {!approved&&plan.isFinal&&<button onClick={()=>approve(u.id)} style={{padding:"7px 14px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#059669,#10B981)",color:"#fff",fontSize:11,cursor:"pointer",fontWeight:700}}>✅ اعتماد الخطة</button>}
+  {!approved&&plan.isFinal&&<button onClick={()=>{ if(confirm("إعادة فتح الخطة للموظف للتحرير؟ سيتمكّن من تعديلها وإعادة إنهائها.")) reopen(u.id); }} style={{padding:"7px 14px",borderRadius:8,border:"1px solid #F59E0B40",background:"#F59E0B12",color:"#F59E0B",fontSize:11,cursor:"pointer",fontWeight:700}} title="أعِد الخطة للموظف ليعدّلها إن لم تُقبَل">↩️ إعادة فتح للتحرير</button>}
   {!approved&&!plan.isFinal&&<span style={{padding:"7px 14px",borderRadius:8,background:"#F1F5F9",border:"1px solid #E2E8F0",color:"#94A3B8",fontSize:11,fontWeight:700}} title="لم يُنهِ الموظف التخطيط بعد (في مرحلة الحفظ المؤقت)">⏳ بانتظار إغلاق الموظف للتخطيط</span>}
   {approved&&(!req||req.status!=="pending")&&<button onClick={()=>setEditModal({emp:u,rows})} style={{padding:"7px 14px",borderRadius:8,border:"1px solid #F59E0B40",background:"#F59E0B12",color:"#F59E0B",fontSize:11,cursor:"pointer",fontWeight:700}}>✏️ طلب تعديل بند (بديل)</button>}
   </div>
@@ -4809,6 +5335,13 @@ function SupervisorTeamGrowth({ myTargets, idps, evals, editRequests, approvals,
    ):<span style={{fontSize:10,color:"#5B7A9E"}}>—</span>}
    </div>
    {approved&&!isInternalCourse&&<ImpactMeasure row={r} impact={impactData?.[`${u.id}__${r.id}`]} editable onSave={d=>onSaveImpact(u.id,r.id,d)} planApproved={!!approved} branchApproved={!!(approvals&&approvals[`${u.branch}__${u.stage}__plans`]?.approved)}/>}
+   {/* ملاحظة المتابع الفني على هذا البند — تصل للموظف */}
+   <div style={{marginTop:8,padding:"8px 10px",background:"#3B82F608",border:"1px solid #3B82F620",borderRadius:8}}>
+   <div style={{fontSize:10,color:"#3B82F6",fontWeight:700,marginBottom:4}}>📝 ملاحظتك للموظف على هذا البند (تصله ليراعيها)</div>
+   <input value={r.supervisorNote||""} onChange={e=>onSaveIdp&&onSaveIdp(u.id,{...idps[u.id],plan:rows.map(x=>x.id===r.id?{...x,supervisorNote:e.target.value}:x)})}
+   placeholder="اكتب توجيهاً أو ملاحظة على هذا البند التطويري..."
+   style={{width:"100%",padding:"7px 9px",background:"#fff",border:"1px solid #3B82F625",borderRadius:6,color:"#1E293B",fontSize:11,boxSizing:"border-box",outline:"none"}}/>
+   </div>
    </div>
   );
   })}
@@ -5106,6 +5639,23 @@ function StageManagerPanel({ user, onLogout }) {
   showToast(approve?"✅ اعتُمدت خطة القيادي":"↩ أُلغي الاعتماد");
   };
 
+  // الاعتماد المالي (مدير المرحلة) — ضمن سقفه؛ يعتمد تكلفة خطة الموظف كاملةً أو يرفض
+  const approveFinance = async (targetId, approve) => {
+  const cur = idps[targetId]||{};
+  const cost = planCost(cur);
+  if(approve){
+   const cap = stageMgrCap(user, users);
+   const already = myTargets.filter(t=>t.id!==targetId && idps[t.id]?.financeApproved).reduce((s,t)=>s+planCost(idps[t.id]),0);
+   if(already+cost > cap){
+    showToast(`\u26a0\ufe0f يتجاوز سقفك المالي (المتبقّي ${(cap-already).toLocaleString("en-US")} ريال)`,"#EF4444");
+    return;
+   }
+  }
+  const ni = {...idps,[targetId]:{...cur, financeApproved:approve, financeApprovedBy:approve?user.name:null, financeApprovedAt:approve?new Date().toISOString().split("T")[0]:null, financeApprovedAmount:approve?cost:0}};
+  setIdpsState(ni); await st.set("idps_360c",ni);
+  showToast(approve?`\u2705 اعتماد مالي (${cost.toLocaleString("en-US")} ريال)`:"\u21a9 أُلغي الاعتماد المالي");
+  };
+
   return (
   <div style={{minHeight:"100vh",background:APP_BG,fontFamily:"'El Messiri',sans-serif",direction:"rtl",color:"#1E293B"}}>
    {toast&&<div style={{position:"fixed",top:18,left:"50%",transform:"translateX(-50%)",background:toast.c,color:"#fff",padding:"11px 26px",borderRadius:30,fontWeight:700,fontSize:13,zIndex:9999,boxShadow:`0 8px 28px ${toast.c}55`,animation:"fadeInUp 0.3s ease"}}>{toast.msg}</div>}
@@ -5127,7 +5677,7 @@ function StageManagerPanel({ user, onLogout }) {
    <main className="print-area" style={{maxWidth:1000,margin:"0 auto",padding:"20px 16px"}}>
   {/* التبويبان */}
   <div style={{display:"flex",gap:8,marginBottom:18}}>
-  {[{k:"growth",l:"👥 متابعة التطور المهني",c:"#10B981"},{k:"eval",l:"📋 متابعة تقييم الأداء",c:"#3B82F6"},{k:"mine",l:"🎯 خطتي وتقييمي",c:"#8B5CF6"}].map(t=>(
+  {[{k:"growth",l:"👥 متابعة التطور المهني",c:"#10B981"},{k:"finance",l:"💰 الاعتماد المالي",c:"#D97706"},{k:"eval",l:"📋 متابعة تقييم الأداء",c:"#3B82F6"},{k:"mine",l:"🎯 خطتي وتقييمي",c:"#8B5CF6"}].map(t=>(
    <button key={t.k} onClick={()=>setTab(t.k)}
    style={{flex:1,padding:"13px 18px",borderRadius:24,border:"none",background:tab===t.k?`linear-gradient(135deg,${t.c},${t.c}cc)`:"#fff",color:tab===t.k?"#fff":"#5B7A9E",fontSize:14,fontWeight:800,cursor:"pointer",boxShadow:tab===t.k?`0 8px 22px ${t.c}45`:"0 2px 10px rgba(46,127,184,0.08)"}}>
    {t.l}
@@ -5147,8 +5697,11 @@ function StageManagerPanel({ user, onLogout }) {
 
   {/* ═══ التبويب 1: متابعة التطور المهني ═══ */}
   {tab==="growth"&&(
-  <LeaderPlanApprovals user={user} users={users} idps={idps} impactData={impactData} readings={readings}
-   onApprovePlan={approveLeaderPlan} onOpenCard={(t)=>setViewTarget(t)}/>
+  <>
+  <AnalyticsDashboard scope={myTargets} evals={evals} idps={idps} impactData={impactData} unitLabel="مرحلة" getUnit={(u)=>u.stage||"—"} fixedMode="growth"/>
+  <div style={{marginTop:20}}><LeaderPlanApprovals user={user} users={users} idps={idps} impactData={impactData} readings={readings}
+   onApprovePlan={approveLeaderPlan} onOpenCard={(t)=>setViewTarget(t)}/></div>
+  </>
   )}
   {tab==="growth"&&myTargets.length>0&&(
   <div>
@@ -5217,9 +5770,69 @@ function StageManagerPanel({ user, onLogout }) {
   </div>
   )}
 
+  {/* ═══ تبويب الاعتماد المالي (مدير المرحلة) ═══ */}
+  {tab==="finance"&&(()=>{
+   const cap = stageMgrCap(user, users);
+   // الموظفون الخاضعون للاعتماد المالي: معلم/إداري بمرحلته، خطتهم معتمدة فنياً
+   const finTargets = myTargets.filter(t=>underStageFinance(t) && idps[t.id]?.approved);
+   const usedAmount = finTargets.filter(t=>idps[t.id]?.financeApproved).reduce((s,t)=>s+planCost(idps[t.id]),0);
+   const remaining = cap - usedAmount;
+   return (
+   <div>
+   <div style={{background:"linear-gradient(135deg,#D9770618,#D9770608)",border:"1px solid #D9770630",borderRadius:16,padding:"16px 20px",marginBottom:16}}>
+   <div style={{fontSize:14,fontWeight:900,color:"#B45309",marginBottom:10}}>💰 سقفك المالي للاعتماد</div>
+   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:10}}>
+   <div style={{background:"#fff",borderRadius:12,padding:"12px 14px",border:"1px solid #D9770620"}}>
+   <div style={{fontSize:10,color:"#8CA3BD",fontWeight:700}}>السقف الكلّي</div>
+   <div style={{fontSize:20,fontWeight:900,color:"#B45309",fontFamily:MONO}}>{cap.toLocaleString("en-US")}</div>
+   <div style={{fontSize:9,color:"#8CA3BD"}}>400 × {myTargets.filter(underStageFinance).length} موظف</div>
+   </div>
+   <div style={{background:"#fff",borderRadius:12,padding:"12px 14px",border:"1px solid #10B98120"}}>
+   <div style={{fontSize:10,color:"#8CA3BD",fontWeight:700}}>المعتمَد</div>
+   <div style={{fontSize:20,fontWeight:900,color:"#059669",fontFamily:MONO}}>{usedAmount.toLocaleString("en-US")}</div>
+   </div>
+   <div style={{background:"#fff",borderRadius:12,padding:"12px 14px",border:`1px solid ${remaining<0?"#EF444420":"#2E7FB820"}`}}>
+   <div style={{fontSize:10,color:"#8CA3BD",fontWeight:700}}>المتبقّي</div>
+   <div style={{fontSize:20,fontWeight:900,color:remaining<0?"#EF4444":"#2E7FB8",fontFamily:MONO}}>{remaining.toLocaleString("en-US")}</div>
+   </div>
+   </div>
+   <div style={{marginTop:10,height:8,background:"#EEF4FB",borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:`${cap>0?Math.min(100,(usedAmount/cap)*100):0}%`,background:usedAmount>cap?"#EF4444":"#D97706",borderRadius:4}}/></div>
+   <div style={{fontSize:10,color:"#8CA3BD",marginTop:6,lineHeight:1.6}}>تعتمد ماليّاً تكلفة خطة كل موظف (معلم/إداري) ضمن سقفك. ما يتجاوز السقف يبقى لمدير الفرع اعتماده. لا يشمل هذا القيادات أو المتابع الفني أو المشرف المختص (يعتمدهم مدير الفرع مباشرة).</div>
+   </div>
+   {finTargets.length===0?(
+   <div style={{textAlign:"center",padding:36,color:"#5B7A9E",background:"#fff",borderRadius:12}}>لا توجد خطط معتمدة فنياً بانتظار اعتمادك المالي بعد.</div>
+   ):finTargets.map(t=>{
+   const idp=idps[t.id]||{}; const cost=planCost(idp); const fApproved=idp.financeApproved;
+   const wouldExceed = !fApproved && (usedAmount+cost>cap);
+   return(
+   <div key={t.id} style={{background:"#fff",border:`1px solid ${fApproved?"#10B98130":wouldExceed?"#EF444430":"#E3EEF9"}`,borderRadius:12,padding:"12px 16px",marginBottom:8,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+   <div style={{flex:1,minWidth:140}}>
+   <div style={{fontWeight:700,fontSize:13,color:"#15385C"}}>{t.name}</div>
+   <div style={{fontSize:10,color:"#8CA3BD"}}>{t.job}{t.stage?` • ${t.stage}`:""} • {(idp.plan||[]).length} بند</div>
+   </div>
+   <div style={{textAlign:"center"}}>
+   <div style={{fontSize:9,color:"#8CA3BD"}}>تكلفة الخطة</div>
+   <div style={{fontSize:16,fontWeight:900,color:"#B45309",fontFamily:MONO}}>{cost.toLocaleString("en-US")}</div>
+   </div>
+   {fApproved
+    ? <button onClick={()=>approveFinance(t.id,false)} style={{padding:"7px 14px",borderRadius:8,border:"1px solid #EF444430",background:"#EF444410",color:"#EF4444",fontSize:11,cursor:"pointer",fontWeight:700}}>↩ إلغاء</button>
+    : <button onClick={()=>approveFinance(t.id,true)} disabled={wouldExceed} title={wouldExceed?"يتجاوز سقفك المالي":""} style={{padding:"7px 14px",borderRadius:8,border:"none",background:wouldExceed?"#CBD5E1":"linear-gradient(135deg,#D97706,#F59E0B)",color:"#fff",fontSize:11,cursor:wouldExceed?"not-allowed":"pointer",fontWeight:700}}>{wouldExceed?"🔒 يتجاوز السقف":"💰 اعتماد مالي"}</button>}
+   </div>
+   );
+   })}
+   {finTargets.some(t=>!idps[t.id]?.financeApproved&&(usedAmount+planCost(idps[t.id])>cap))&&(
+   <div style={{background:"#EF444410",border:"1px solid #EF444430",borderRadius:10,padding:"10px 14px",marginTop:8,fontSize:11,color:"#B91C1C",lineHeight:1.7}}>
+   ⚠️ بعض الخطط تتجاوز سقفك المالي المتبقّي. هذه ستبقى لمدير الفرع لاعتمادها ضمن سقفه الأوسع.
+   </div>
+   )}
+   </div>
+   );
+  })()}
+
   {/* ═══ التبويب 2: متابعة تقييم الأداء ═══ */}
-  {tab==="eval"&&myTargets.length>0&&(
+  {tab==="eval"&&(
   <div>
+   <AnalyticsDashboard scope={myTargets} evals={evals} idps={idps} impactData={impactData} unitLabel="مرحلة" getUnit={(u)=>u.stage||"—"} fixedMode="eval"/>
    {(()=>{
    const okPairs = myStages.filter(s=>approvals[`${user.branch}__${s}__eval`]?.approved);
    if(!okPairs.length) return null;
@@ -5395,7 +6008,14 @@ function EvaluatorPanel({ user, partyKey, onLogout }) {
   const nu = (users||[]).map(u=>u.id===empId?{...u,peerIds,peerId:undefined}:u);
   setUsersState(nu);
   try {
-   if (typeof window.andlusAPI?.setPeers === "function") { await window.andlusAPI.setPeers(empId, peerIds); }
+   if (typeof window.andlusAPI?.setPeers === "function") {
+    await window.andlusAPI.setPeers(empId, peerIds);
+    // نعيد تحميل المستخدمين من الخادم لضمان اتّساق peerIds عبر كل الحسابات
+    if (typeof window.andlusAPI?.get === "function") {
+     const fresh = await st.get("users_360c");
+     if (Array.isArray(fresh)) setUsersState(fresh);
+    }
+   }
    else { await st.set("users_360c",nu); }
   } catch(e){ showToast("تعذّر حفظ الزملاء","#EF4444"); }
   setPeerAssign(pa=>pa&&pa.id===empId?{...pa,peerIds}:pa);
@@ -5531,20 +6151,24 @@ function EvaluatorPanel({ user, partyKey, onLogout }) {
    })()}
   </div>
   )}
-  {supTab==="team_growth"&&partyKey==="supervisor"&&(
+  {supTab==="team_growth"&&partyKey==="supervisor"&&(<>
+  <AnalyticsDashboard scope={myTargets} evals={evals} idps={idps} impactData={impactData} unitLabel="مرحلة" getUnit={(u)=>u.stage||"—"} fixedMode="growth"/>
+  <div style={{height:16}}/>
   <SupervisorTeamGrowth
    myTargets={myTargets} idps={idps} evals={evals} editRequests={editRequests} approvals={approvals} impactData={impactData} onSaveImpact={saveImpact}
    user={user}
    onApprove={saveTeamIdp} onSaveIdp={saveTeamIdp} onRequestEdit={requestEdit}
    onOpenPlan={setPlanTarget}
   />
-  )}
+  </>)}
   {supTab==="team_growth"&&partyKey!=="supervisor"&&(
   <div style={{textAlign:"center",padding:50,color:"#5B7A9E"}}>متابعة التطور المهني متاحة للمتابع الفني فقط</div>
   )}
 
   {/* ═══ التبويب 4: متابعة تقييم الأداء للموظفين ═══ */}
   {supTab==="team_eval"&&(<>
+  <AnalyticsDashboard scope={myTargets} evals={evals} idps={idps} impactData={impactData} unitLabel="مرحلة" getUnit={(u)=>u.stage||"—"} fixedMode="eval"/>
+  <div style={{height:16}}/>
   {(()=>{
   const stagesOf = [...new Set(myTargets.map(u=>`${u.branch}__${u.stage}`).filter(k=>!k.startsWith("undefined")))];
   const approvedStages = stagesOf.filter(k=>approvals[`${k}__eval`]?.approved);
@@ -5932,8 +6556,13 @@ function EmployeeGrowthPlan({ user, empEval, idpData, onSave, viewerRole, impact
    }
   </div>
 
-  {/* اختيار الخيار */}
-  {!approved&&(
+  {/* ملاحظة المتابع الفني على هذا البند (تظهر للموظف ليراعيها) */}
+  {row.supervisorNote&&row.supervisorNote.trim()&&(
+  <div style={{background:"#3B82F60D",border:"1px solid #3B82F630",borderRadius:10,padding:"9px 12px",marginBottom:12}}>
+  <div style={{fontSize:10,color:"#3B82F6",fontWeight:800,marginBottom:3}}>📝 ملاحظة المتابع الفني</div>
+  <div style={{fontSize:12,color:"#15385C",lineHeight:1.6}}>{row.supervisorNote}</div>
+  </div>
+  )}
   <div style={{display:"flex",gap:8,marginBottom:14}}>
    {[{k:"auto",l:"⚡ اختيار من المكتبة"},{k:"manual",l:"✏️ إدخال يدوي"}].map(opt=>(
    <button key={opt.k} onClick={()=>canEditFields&&setF("mode",opt.k)} disabled={!canEditFields}
@@ -5942,7 +6571,6 @@ function EmployeeGrowthPlan({ user, empEval, idpData, onSave, viewerRole, impact
    </button>
    ))}
   </div>
-  )}
 
   {row.mode==="auto"?(
    /* ═══ الخيار الأول: تلقائي من المكتبة ═══ */
@@ -6230,6 +6858,7 @@ function ExecPanel({ user, onLogout }) {
   const [locks,setLocks] = useState({});
   const [approvals,setApprovals] = useState({});
   const [viewTarget,setViewTarget] = useState(null);
+  const [viewPlanTarget,setViewPlanTarget] = useState(null);
   const [evalWinData,setEvalWinData] = useState({branches:{}});
   const [toast,setToast] = useState(null);
   const showToast = (msg,c="#10B981") => { setToast({msg,c}); setTimeout(()=>setToast(null),2000); };
@@ -6304,149 +6933,17 @@ function ExecPanel({ user, onLogout }) {
    ))}
    </div>
 
-   {(tab==="perf"||tab==="growth")&&(()=>{
-   // قائمة الفروع/الإدارات ضمن النطاق (للفصل)
-   const branchesInScope = [...new Set(scope.map(u=>u.branch).filter(Boolean))].sort();
-   const visRows = rows.filter(r=>!execBranchF||r.u.branch===execBranchF);
-   // تجميع حسب الفرع/الإدارة
-   const byBranch = {};
-   visRows.forEach(r=>{ const b=r.u.branch||"—"; (byBranch[b]=byBranch[b]||[]).push(r); });
-   const branchKeys = Object.keys(byBranch).sort();
-   const tabColor = tab==="perf"?"#2E7FB8":"#10B981";
-   return (
-   <div>
-   <div style={{background:"#FFFFFF",border:`1px solid ${tabColor}25`,borderRadius:12,padding:"14px 18px",marginBottom:14}}>
-   <div style={{fontSize:14,fontWeight:900,color:tabColor}}>{tab==="perf"?"📊 متابعة تقييم الأداء":"🎯 متابعة التطور المهني"} — كل الفروع والإدارات</div>
-   <div style={{fontSize:11,color:"#5B7A9E",marginTop:2}}>{scope.length} شخصاً ضمن نطاقك • {branchesInScope.length} فرع/إدارة</div>
-   </div>
-   {/* فلتر الفصل بدلالة الفرع/الإدارة — يظهر متى وُجد فرع/إدارة واحد على الأقل */}
-   {branchesInScope.length>=1&&(
-   <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14,alignItems:"center"}}>
-   <span style={{fontSize:11,color:"#8CA3BD",fontWeight:700,marginLeft:4}}>🔍 تصفية:</span>
-   <button onClick={()=>setExecBranchF("")} style={{padding:"7px 14px",borderRadius:20,border:"none",background:!execBranchF?tabColor:"#EEF4FB",color:!execBranchF?"#fff":"#5B7A9E",fontSize:11,fontWeight:700,cursor:"pointer"}}>الكل ({scope.length})</button>
-   {branchesInScope.map(b=>{ const cnt=scope.filter(u=>u.branch===b).length; return(
-   <button key={b} onClick={()=>setExecBranchF(b)} style={{padding:"7px 14px",borderRadius:20,border:"none",background:execBranchF===b?tabColor:"#EEF4FB",color:execBranchF===b?"#fff":"#5B7A9E",fontSize:11,fontWeight:700,cursor:"pointer"}}>{isDepartment(b)?"🏢":"🏛️"} {b} ({cnt})</button>
-   );})}
-   </div>
+   {(tab==="perf"||tab==="growth")&&(
+   <AnalyticsDashboard
+    scope={scope}
+    evals={evals} idps={idps} impactData={impactData}
+    unitLabel="فرع"
+    getUnit={(u)=>u.branch||"—"}
+    fixedMode={tab==="perf"?"eval":"growth"}
+    onOpenCard={(u)=>setViewTarget(u)}
+    onOpenPlan={(u)=>setViewPlanTarget(u)}
+   />
    )}
-   {scope.length===0&&(
-   <div style={{textAlign:"center",padding:40,color:"#5B7A9E",background:"#fff",borderRadius:12,border:"1px dashed #DDE9F5"}}>
-   <div style={{fontSize:32,marginBottom:8}}>📭</div>
-   <div style={{fontWeight:700,color:"#15385C",marginBottom:4}}>لا يوجد أشخاص ضمن نطاقك بعد</div>
-   <div style={{fontSize:12}}>عند إضافة حسابات للإدارات/الفروع التابعة لك، ستظهر ملخّصاتها هنا.</div>
-   </div>
-   )}
-   {/* ملخّص إحصائي مختصر — بالنسب، قابل للفصل بفلتر الفرع أعلاه */}
-   {(()=>{
-   const R = visRows; const n = R.length; if(!n) return null;
-   const pct = (x)=> n? Math.round((x/n)*100):0;
-   if(tab==="growth"){
-    const planned = R.filter(r=>r.anyPlan).length;
-    const approved = R.filter(r=>r.planApproved).length;
-    const totalRows = R.reduce((s,r)=>s+r.planCount,0);
-    const execRows = R.reduce((s,r)=>s+r.executedCount,0);
-    const measRows = R.reduce((s,r)=>s+r.measuredCount,0);
-    const stat = [
-     {l:"نسبة التخطيط", v:pct(planned), sub:`${planned}/${n}`, c:"#10B981"},
-     {l:"نسبة الاعتماد", v:pct(approved), sub:`${approved}/${n}`, c:"#2E7FB8"},
-     {l:"نسبة التنفيذ", v:totalRows?Math.round((execRows/totalRows)*100):0, sub:`${execRows}/${totalRows} بند`, c:"#F59E0B"},
-     {l:"نسبة قياس الأثر", v:totalRows?Math.round((measRows/totalRows)*100):0, sub:`${measRows}/${totalRows} بند`, c:"#8B5CF6"},
-    ];
-    return (
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:10,marginBottom:16}}>
-    {stat.map(s=>(
-    <div key={s.l} style={{background:"#fff",border:`1px solid ${s.c}25`,borderRadius:14,padding:"14px 16px"}}>
-    <div style={{fontSize:11,color:"#5B7A9E",fontWeight:700,marginBottom:6}}>{s.l}</div>
-    <div style={{fontSize:26,fontWeight:900,color:s.c,fontFamily:MONO,lineHeight:1}}>{s.v}<span style={{fontSize:14}}>%</span></div>
-    <div style={{height:5,background:"#EEF4FB",borderRadius:3,marginTop:8,overflow:"hidden"}}><div style={{height:"100%",width:`${s.v}%`,background:s.c,borderRadius:3}}/></div>
-    <div style={{fontSize:9,color:"#8CA3BD",marginTop:5}}>{s.sub}</div>
-    </div>
-    ))}
-    </div>
-    );
-   } else {
-    const evaluated = R.filter(r=>r.evalDone).length;
-    const overallScores = R.map(r=>r.score).filter(x=>x!=null);
-    const overallAvg = overallScores.length? overallScores.reduce((a,b)=>a+b,0)/overallScores.length : null;
-    const partyAvg = {};
-    EVAL_PARTIES.forEach(p=>{
-     const vals = R.map(r=>r.st360?.partyScores?.[p.key]?.avg).filter(x=>x!=null);
-     partyAvg[p.key] = vals.length? vals.reduce((a,b)=>a+b,0)/vals.length : null;
-    });
-    const activeParties = EVAL_PARTIES.filter(p=>partyAvg[p.key]!=null);
-    return (
-    <div style={{marginBottom:16}}>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10,marginBottom:10}}>
-    <div style={{background:"#fff",border:"1px solid #2E7FB825",borderRadius:14,padding:"14px 16px"}}>
-    <div style={{fontSize:11,color:"#5B7A9E",fontWeight:700,marginBottom:6}}>نسبة التقييمات المكتملة</div>
-    <div style={{fontSize:26,fontWeight:900,color:"#2E7FB8",fontFamily:MONO,lineHeight:1}}>{pct(evaluated)}<span style={{fontSize:14}}>%</span></div>
-    <div style={{height:5,background:"#EEF4FB",borderRadius:3,marginTop:8,overflow:"hidden"}}><div style={{height:"100%",width:`${pct(evaluated)}%`,background:"#2E7FB8",borderRadius:3}}/></div>
-    <div style={{fontSize:9,color:"#8CA3BD",marginTop:5}}>{evaluated}/{n} شخصاً</div>
-    </div>
-    <div style={{background:"#fff",border:`1px solid ${overallAvg!=null?getLevel(overallAvg).color:"#DDE9F5"}25`,borderRadius:14,padding:"14px 16px"}}>
-    <div style={{fontSize:11,color:"#5B7A9E",fontWeight:700,marginBottom:6}}>متوسّط الأداء العام</div>
-    <div style={{fontSize:26,fontWeight:900,color:overallAvg!=null?getLevel(overallAvg).color:"#8CA3BD",fontFamily:MONO,lineHeight:1}}>{overallAvg!=null?overallAvg.toFixed(2):"—"}<span style={{fontSize:12}}>/5</span></div>
-    {overallAvg!=null&&<div style={{fontSize:10,color:getLevel(overallAvg).color,marginTop:6,fontWeight:700}}>{getLevel(overallAvg).label}</div>}
-    </div>
-    </div>
-    {activeParties.length>0&&(
-    <div style={{background:"#F7FAFE",border:"1px solid #E3EEF9",borderRadius:14,padding:"14px 16px"}}>
-    <div style={{fontSize:12,fontWeight:800,color:"#15385C",marginBottom:10}}>متوسّط الأداء حسب الطرف المُقيّم</div>
-    <div style={{display:"flex",flexDirection:"column",gap:8}}>
-    {activeParties.map(p=>{ const v=partyAvg[p.key]; const lv=getLevel(v); return (
-    <div key={p.key} style={{display:"flex",alignItems:"center",gap:10}}>
-    <span style={{fontSize:11,color:p.color,fontWeight:700,minWidth:100}}>{p.icon} {p.label}</span>
-    <div style={{flex:1,height:8,background:"#EEF4FB",borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:`${(v/5)*100}%`,background:lv.color,borderRadius:4}}/></div>
-    <span style={{fontSize:12,fontWeight:900,color:lv.color,fontFamily:MONO,minWidth:36,textAlign:"left"}}>{v.toFixed(2)}</span>
-    </div>
-    );})}
-    </div>
-    </div>
-    )}
-    </div>
-    );
-   }
-   })()}
-   {rows.length===0?(
-   <div style={{textAlign:"center",padding:40,color:"#5B7A9E",background:"#fff",borderRadius:12}}>لا يوجد أشخاص ضمن نطاقك بعد.</div>
-   ):branchKeys.map(bk=>{
-   // ملخّص إحصائي للفرع
-   const list=byBranch[bk];
-   const scored=list.filter(r=>r.score!=null);
-   const avg=scored.length?scored.reduce((s,r)=>s+r.score,0)/scored.length:null;
-   const planned=list.filter(r=>r.planRows>0).length;
-   const approved=list.filter(r=>r.planApproved).length;
-   return(
-   <details key={bk} open={!!execBranchF||branchKeys.length<=3} style={{background:"#F7FAFE",border:"1px solid #E3EEF9",borderRadius:16,marginBottom:10,overflow:"hidden"}}>
-   <summary style={{padding:"12px 16px",cursor:"pointer",listStyle:"none",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-   <span style={{fontSize:13,fontWeight:900,color:"#15385C",flex:1}}>🏛️ {bk} <span style={{color:"#8CA3BD",fontWeight:600}}>({list.length})</span></span>
-   {tab==="perf"
-    ? (avg!=null?<span style={{fontSize:11,fontWeight:800,color:getLevel(avg).color,background:`${getLevel(avg).color}12`,padding:"3px 12px",borderRadius:20}}>متوسّط {avg.toFixed(2)} • {getLevel(avg).label}</span>:<span style={{fontSize:10,color:"#8CA3BD"}}>لم يُقيَّم بعد</span>)
-    : <span style={{fontSize:11,fontWeight:800,color:"#10B981",background:"#10B98112",padding:"3px 12px",borderRadius:20}}>{approved}/{planned} خطة معتمدة</span>}
-   </summary>
-   <div style={{padding:"0 12px 12px"}}>
-   {list.map(({u,score,planApproved,planRows})=>{
-   const lv=score!=null?getLevel(score):null;
-   return(
-   <div key={u.id} style={{background:"#fff",border:"1px solid #E3EEF9",borderRadius:10,padding:"9px 13px",display:"flex",alignItems:"center",gap:10,marginBottom:6,flexWrap:"wrap"}}>
-   <div style={{flex:1,minWidth:130}}>
-   <div style={{fontWeight:700,fontSize:12,color:"#1E293B"}}>{u.name}</div>
-   <div style={{fontSize:10,color:"#5B7A9E"}}>{ROLES_LIST[u.role]}{u.roleSubtype&&ROLE_SUBTYPES[u.role]?` • ${ROLE_SUBTYPES[u.role][u.roleSubtype]||""}`:""}{u.stage?` • ${u.stage}`:""} • <span style={{color:"#2E7FB8"}}>{u.branch||"—"}</span></div>
-   </div>
-   {tab==="perf"
-    ? (lv?<div style={{background:`${lv.color}15`,borderRadius:8,padding:"3px 10px",display:"flex",gap:6,alignItems:"center"}}><span style={{fontSize:12,fontWeight:900,color:lv.color,fontFamily:MONO}}>{score.toFixed(2)}</span><span style={{fontSize:9,color:lv.color}}>{lv.label}</span></div>:<span style={{fontSize:10,color:"#8CA3BD"}}>لم يُقيَّم</span>)
-    : (planRows>0?<span style={{fontSize:10,color:planApproved?"#059669":"#F59E0B",background:planApproved?"#10B98112":"#F59E0B12",padding:"3px 10px",borderRadius:20,fontWeight:700}}>{planApproved?"✅ خطة معتمدة":"⏳ قيد الاعتماد"} • {planRows} بند</span>:<span style={{fontSize:10,color:"#8CA3BD"}}>لا خطة</span>)}
-   <button onClick={()=>setViewTarget(u)} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${tabColor}30`,background:`${tabColor}12`,color:tabColor,fontSize:11,cursor:"pointer",fontWeight:700}}>عرض</button>
-   </div>
-   );
-   })}
-   </div>
-   </details>
-   );
-   })}
-   </div>
-   );
-   })()}
 
    {tab==="mine"&&(
    <MyPlanAndEval user={user} idps={idps} evals={evals} impactData={impactData} readings={readings} locks={locks} setLocks={setLocks} evalWinData={evalWinData}
@@ -6454,6 +6951,18 @@ function ExecPanel({ user, onLogout }) {
    )}
    </main>
    {viewTarget&&<Card360 targetUser={viewTarget} empEval={evals[viewTarget.id]||{}} idpData={idps[viewTarget.id]} readings={readings} onSaveReadings={async d=>{setReadings(d);await st.set("readings_360c",d);}} currentUser={user} allEvals={evals} allUsers={users} approvals={approvals} onClose={()=>setViewTarget(null)}/>}
+   {viewPlanTarget&&(
+   <div onClick={()=>setViewPlanTarget(null)} style={{position:"fixed",inset:0,background:"rgba(15,56,92,0.55)",zIndex:1000,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"30px 16px",overflowY:"auto"}}>
+   <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:20,width:"100%",maxWidth:820,padding:24,direction:"rtl"}}>
+   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+   <div><div style={{fontSize:16,fontWeight:900,color:"#15385C"}}>🎯 خطة التطور المهني — {viewPlanTarget.name}</div>
+   <div style={{fontSize:11,color:"#8CA3BD"}}>{ROLES_LIST[viewPlanTarget.role]}{viewPlanTarget.branch?` • ${viewPlanTarget.branch}`:""}</div></div>
+   <button onClick={()=>setViewPlanTarget(null)} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#5B7A9E"}}>✕</button>
+   </div>
+   <EmployeeGrowthPlan user={viewPlanTarget} empEval={evals[viewPlanTarget.id]||{}} idpData={idps[viewPlanTarget.id]} onSave={()=>{}} viewerRole="exec" impactData={impactData}/>
+   </div>
+   </div>
+   )}
    {toast&&<div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",background:toast.c,color:"#fff",padding:"10px 22px",borderRadius:24,fontSize:13,fontWeight:700,zIndex:900}}>{toast.msg}</div>}
   </div>
   );
@@ -6678,18 +7187,37 @@ function EmployeePanel({ user, onLogout }) {
   const myComps = (getActiveJobs()[user.job]||[]).filter(c=>selfAllowedCats.includes(getCat(c)));
   const selfDone = myComps.some(c=>Object.values(myEval.self?.[c]||{}).some(v=>v>0));
 
-  const peerTargets = (users||[]).filter(u=>u.id!==user.id && (u.peerIds||(u.peerId?[u.peerId]:[])).includes(user.id));
+  // علاقة الزملاء متبادلة: أُقيّم مَن أُدرِج في قائمتهم (peerIds تحويني)، ومَن أدرجتُه أنا في قائمتي.
+  // هذا يضمن ظهور التقييم بصرف النظر عن اتّجاه التعيين الذي أجراه المتابع الفني.
+  const myPeerIds = (user.peerIds||(user.peerId?[user.peerId]:[]));
+  const peerTargets = (users||[]).filter(u=>u.id!==user.id && (
+    (u.peerIds||(u.peerId?[u.peerId]:[])).includes(user.id) || myPeerIds.includes(u.id)
+  ));
   // الرؤساء الذين يقيّمهم المستخدم الحالي كمرؤوس (التقييم الصاعد)
-  const bossTargets = (users||[]).filter(t=>{
-    if (t.id===user.id) return false;
-    if (getEvalModel(t)!=="leader") return false;       // فقط القياديون لهم مرؤوسون
-    return getEvaluators(t, users).some(e=>e.id===user.id);   // هل أنا من مُقيّميه؟
-  });
+  // الجذر السابق: كان يستخدم getEvaluators (مرؤوسي القيادي) بدل رؤساء المستخدم.
+  // الصحيح: رئيسي المباشر = من يعتمد خطتي في الهرمية (getPlanApprover)، ونضيف من تربطني به علاقة إشرافية مباشرة.
+  const bossTargets = (()=>{
+    const set = {};
+    // 1) الرئيس المباشر الهرمي (مدير المرحلة→مدير الفرع→الشؤون→الرئيس التنفيذي...)
+    const approver = getPlanApprover(user, users);
+    if (approver && approver.id!==user.id && getEvalModel(approver)==="leader") set[approver.id]=approver;
+    // 2) المتابع الفني/المدير المباشر المعيّن صراحةً إن كان قياديّاً
+    (users||[]).forEach(t=>{
+      if (t.id===user.id) return;
+      if (getEvalModel(t)!=="leader") return;
+      // إن كان هذا القيادي رئيساً مباشراً لي عبر الهرمية العكسية (أنا من مرؤوسيه المباشرين)
+      const myBossViaApproval = getPlanApprover(user, users);
+      if (myBossViaApproval && myBossViaApproval.id===t.id) set[t.id]=t;
+    });
+    return Object.values(set);
+  })();
   // مقدّمو الخدمة الذين يقيّمهم المستخدم كمستفيد
+  // الجذر نفسه: نستخدم العلاقة الصحيحة — المستفيد يقيّم مقدّم الخدمة الذي يخدم نطاقه.
   const serviceTargets = (users||[]).filter(t=>{
     if (t.id===user.id) return false;
     const m = getEvalModel(t);
     if (m!=="branch_ext" && m!=="specialist") return false;  // من لهم مستفيدون
+    // المستفيدون من الامتداد الفني/الأخصائي = القياديون في نطاقه (getEvaluators يُعدّدهم)
     return getEvaluators(t, users).some(e=>e.id===user.id);
   });
 

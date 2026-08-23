@@ -30,6 +30,11 @@ function migrate() {
     db.exec('ALTER TABLE users ADD COLUMN role_subtype TEXT');
     console.log('✓ أُضيف عمود role_subtype إلى users');
   }
+  // الرقم الوظيفي (4-5 أرقام)
+  if (!userCols.includes('job_number')) {
+    db.exec('ALTER TABLE users ADD COLUMN job_number TEXT');
+    console.log('✓ أُضيف عمود job_number إلى users');
+  }
 
   // 2) إعادة بناء users إذا كانت CHECK القديمة لا تقبل الأدوار الجديدة
   const userSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get()?.sql || '';

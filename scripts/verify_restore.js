@@ -5,7 +5,8 @@ const [srcPath, BASE, U, P] = process.argv.slice(2);
 const db = new Database(srcPath, { readonly: true });
 let pass = 0, fail = 0;
 const ok = (n, c, x = '') => { c ? (pass++, console.log('  ✓ ' + n)) : (fail++, console.log('  ✗ ' + n + '   ' + x)); };
-const S = (v) => { // stable stringify
+const S = (v) => { // stable stringify (JSON.stringify(undefined) يُعيد undefined لا نصاً)
+  if (v === undefined) return 'undefined';
   if (v === null || typeof v !== 'object') return JSON.stringify(v);
   if (Array.isArray(v)) return '[' + v.map(S).join(',') + ']';
   return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + S(v[k])).join(',') + '}';
@@ -45,7 +46,13 @@ const S = (v) => { // stable stringify
   }
 
   console.log('\n─── درجات التقييم ───');
-  const bulk = (await get('/api/evals')).evals;
+  // المسار الجماعي /api/evals غير موجود في النسخ الأقدم — نرجع لطلب لكل موظف عندها
+  let bulk = (await get('/api/evals')).evals;
+  if (!bulk) {
+    console.log('  (المسار الجماعي /api/evals غير متاح على هذا الخادم — أستخدم طلباً لكل موظف)');
+    bulk = {};
+    for (const u of su) bulk[u.id] = await get('/api/evals/' + u.id);
+  }
   const groups = {};
   for (const s of db.prepare('SELECT * FROM eval_scores').all()) {
     const k = `${s.employee_id}|${s.party}|${s.round || 1}`;

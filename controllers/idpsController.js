@@ -53,12 +53,14 @@ function saveIdp(req, res) {
 
   const tx = db.transaction(() => {
     // رأس الخطة
-    db.prepare(`INSERT INTO idps (employee_id, approved, approved_by, approved_at, needs_branch_approval, branch_approved_at, edit_unlocked, edit_unlocked_row, is_final, certificate, updated_at)
-      VALUES (@employee_id,@approved,@approved_by,@approved_at,@needs_branch_approval,@branch_approved_at,@edit_unlocked,@edit_unlocked_row,@is_final,@certificate,datetime('now'))
+    db.prepare(`INSERT INTO idps (employee_id, approved, approved_by, approved_at, needs_branch_approval, branch_approved_at, edit_unlocked, edit_unlocked_row, is_final, certificate, finance_approved, finance_approved_by, finance_approved_at, finance_approved_amount, branch_finance_approved, branch_finance_approved_by, branch_finance_approved_at, updated_at)
+      VALUES (@employee_id,@approved,@approved_by,@approved_at,@needs_branch_approval,@branch_approved_at,@edit_unlocked,@edit_unlocked_row,@is_final,@certificate,@finance_approved,@finance_approved_by,@finance_approved_at,@finance_approved_amount,@branch_finance_approved,@branch_finance_approved_by,@branch_finance_approved_at,datetime('now'))
       ON CONFLICT(employee_id) DO UPDATE SET
         approved=@approved, approved_by=@approved_by, approved_at=@approved_at,
         needs_branch_approval=@needs_branch_approval, branch_approved_at=@branch_approved_at,
-        edit_unlocked=@edit_unlocked, edit_unlocked_row=@edit_unlocked_row, is_final=@is_final, certificate=@certificate, updated_at=datetime('now')`)
+        edit_unlocked=@edit_unlocked, edit_unlocked_row=@edit_unlocked_row, is_final=@is_final, certificate=@certificate,
+        finance_approved=@finance_approved, finance_approved_by=@finance_approved_by, finance_approved_at=@finance_approved_at, finance_approved_amount=@finance_approved_amount,
+        branch_finance_approved=@branch_finance_approved, branch_finance_approved_by=@branch_finance_approved_by, branch_finance_approved_at=@branch_finance_approved_at, updated_at=datetime('now')`)
       .run({
         employee_id: empId,
         approved: b.approved ? 1 : 0,
@@ -70,6 +72,13 @@ function saveIdp(req, res) {
         edit_unlocked_row: b.editUnlockedRow || null,
         is_final: b.isFinal ? 1 : 0,
         certificate: b.certificate ? JSON.stringify(b.certificate) : null,
+        finance_approved: b.financeApproved ? 1 : 0,
+        finance_approved_by: b.financeApprovedBy || null,
+        finance_approved_at: b.financeApprovedAt || null,
+        finance_approved_amount: (b.financeApprovedAmount != null ? b.financeApprovedAmount : null),
+        branch_finance_approved: b.branchFinanceApproved ? 1 : 0,
+        branch_finance_approved_by: b.branchFinanceApprovedBy || null,
+        branch_finance_approved_at: b.branchFinanceApprovedAt || null,
       });
 
     // البنود: نحذف القديمة ونُدرج الجديدة (أبسط وأضمن للاتساق)

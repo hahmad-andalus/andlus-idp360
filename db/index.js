@@ -66,6 +66,17 @@ function migrate() {
     db.exec('ALTER TABLE idps ADD COLUMN is_final INTEGER DEFAULT 0');
     console.log('✓ أُضيف عمود is_final إلى idps');
   }
+  // الاعتماد المالي (مدير المرحلة) والنهائي (مدير الفرع)
+  if (!idpCols.includes('finance_approved')) {
+    db.exec('ALTER TABLE idps ADD COLUMN finance_approved INTEGER DEFAULT 0');
+    db.exec('ALTER TABLE idps ADD COLUMN finance_approved_by TEXT');
+    db.exec('ALTER TABLE idps ADD COLUMN finance_approved_at TEXT');
+    db.exec('ALTER TABLE idps ADD COLUMN finance_approved_amount REAL');
+    db.exec('ALTER TABLE idps ADD COLUMN branch_finance_approved INTEGER DEFAULT 0');
+    db.exec('ALTER TABLE idps ADD COLUMN branch_finance_approved_by TEXT');
+    db.exec('ALTER TABLE idps ADD COLUMN branch_finance_approved_at TEXT');
+    console.log('✓ أُضيفت أعمدة الاعتماد المالي إلى idps');
+  }
   // 5) عمود init_password في account_requests (كلمة المرور المبدئية)
   const arSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='account_requests'").get()?.sql;
   if (arSql) {

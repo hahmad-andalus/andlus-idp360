@@ -195,6 +195,8 @@ function canWriteIdp(actor, target) {
   if (isDirectSupervisor(actor, target)) return true;            // المتابع الفني يعتمد
   if (isDirectManager(actor, target)) return true;               // المدير المباشر
   if (isPlanApproverOf(actor, target)) return true;              // سلسلة الاعتماد الهرمي
+  // مدير المرحلة: يعتمد ماليّاً لموظفي مرحلته في فرعه (حتى إن لم يُضبط stageManagerId)
+  if (actor.role === 'stage_mgr' && actor.branch === target.branch && actor.stage === target.stage) return true;
   if (actor.role === 'branch_mgr' && branchesOf(actor).includes(target.branch)) return true;
   return false;
 }

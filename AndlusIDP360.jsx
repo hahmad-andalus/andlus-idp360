@@ -2668,7 +2668,7 @@ function BranchManagerPanel({ user, onLogout }) {
     return;
    }
   }
-  const ni = {...idps,[empId]:{...cur, branchFinanceApproved:approve, branchFinanceBy:approve?user.name:null, branchFinanceAt:approve?new Date().toISOString().split("T")[0]:null, finalApproved:approve}};
+  const ni = {...idps,[empId]:{...cur, branchFinanceApproved:approve, branchFinanceApprovedBy:approve?user.name:null, branchFinanceApprovedAt:approve?new Date().toISOString().split("T")[0]:null, finalApproved:approve}};
   setIdpsState(ni); await st.set("idps_360c",ni);
   showToast(approve?`✅ اعتماد نهائي (${cost.toLocaleString("en-US")} ريال)`:"↩ أُلغي الاعتماد النهائي");
   };

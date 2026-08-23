@@ -97,6 +97,8 @@
             needsBranchApproval: !!v.needs_branch_approval, branchApprovedAt: v.branch_approved_at,
             editUnlocked: !!v.edit_unlocked, editUnlockedRow: v.edit_unlocked_row,
             isFinal: !!v.is_final,
+            financeApproved: !!v.finance_approved, financeApprovedBy: v.finance_approved_by, financeApprovedAt: v.finance_approved_at, financeApprovedAmount: v.finance_approved_amount,
+            branchFinanceApproved: !!v.branch_finance_approved, branchFinanceApprovedBy: v.branch_finance_approved_by, branchFinanceApprovedAt: v.branch_finance_approved_at,
             plan: v.plan || [],
             certificate: v.certificate ? (typeof v.certificate === 'string' ? JSON.parse(v.certificate) : v.certificate) : undefined,
           };

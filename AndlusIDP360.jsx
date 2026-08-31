@@ -459,7 +459,8 @@ const BRANCHES_LIST = [
 
 // الإدارات الوظيفية (تُضاف لنفس قائمة الفرع/الإدارة)
 const DEPARTMENTS_LIST = [
-  "إدارة التميز التعليمي","إدارة الموارد البشرية","الإدارة المالية",
+  "إدارة التميز التعليمي","إدارة التميز التعليمي الأجنبي","إدارة الخدمات المدرسية",
+  "إدارة الموارد البشرية","الإدارة المالية",
   "إدارة التواصل المؤسسي","إدارة التقنية","إدارة التميز المؤسسي",
   "إدارة المرافق","إدارة المشتريات","الإدارة التنفيذية",
 ];
@@ -563,7 +564,7 @@ const EVAL_PARTIES = [
   { key:"beneficiary",label:"المستفيدون",      color:"#0891B2", icon:"🎯", cats:[] },
 ];
 
-const ROLES_LIST = { admin:"مدير النظام", exec:"إدارة تنفيذية", branch_mgr:"مدير عام فرع", stage_mgr:"مدير مباشر (مرحلة/مجمع)", deputy:"وكيل", supervisor:"متابع فني", dept_mgr:"مدير إدارة وظيفية", specialist:"أخصائي إدارة وظيفية", branch_ext:"امتداد فني لإدارة وظيفية", employee:"معلم/إداري" };
+const ROLES_LIST = { admin:"مدير النظام", admin_assistant:"مساعد مدير النظام", exec:"إدارة تنفيذية", branch_mgr:"مدير عام فرع", stage_mgr:"مدير مباشر (مرحلة/مجمع)", deputy:"وكيل", supervisor:"متابع فني", dept_mgr:"مدير إدارة وظيفية", specialist:"أخصائي إدارة وظيفية", branch_ext:"امتداد فني لإدارة وظيفية", employee:"معلم/إداري" };
 // الأنواع الفرعية لكل دور (فارغ = لا نوع فرعي)
 const ROLE_SUBTYPES = {
   exec: { ceo:"رئيس تنفيذي", edu_head:"مدير الشؤون التعليمية", admin_head:"مدير الشؤون الإدارية والمالية", excellence_head:"مدير التخطيط والتميز المؤسسي" },
@@ -584,6 +585,86 @@ const st = {
   // ج-3: نسيت كلمة السر (محلياً بلا فعل حقيقي؛ يُربط بالـAPI على الخادم عبر transform)
   forgotPassword: async (_username) => { return { ok:true }; },
 };
+
+// ═══════════════════════════════════════════════════════════
+// ثنائية اللغة (i18n): قاموس عربي → إنجليزي يديره مدير النظام
+// اللغة تُخزَّن محلّياً؛ القاموس مشترك على الخادم (i18n_360c)
+// ═══════════════════════════════════════════════════════════
+// القاموس الحيّ (يُملأ من الخادم عند الإقلاع)؛ نافذة عامّة ليصل إليه t() من أي مكوّن
+if (typeof window !== "undefined" && !window.__I18N) window.__I18N = { lang: "ar", dict: {} };
+
+// القاموس الافتراضي للمصطلحات الرئيسية (بذرة — يمكن لمدير النظام تعديلها/إكمالها)
+const I18N_SEED = {
+  // تبويبات وعناوين رئيسية
+  "لوحة المعلومات":"Dashboard", "الحسابات":"Accounts", "متابعة تقييم الأداء":"Performance Review",
+  "متابعة التطور المهني":"Professional Development", "مصفوفة الجدارات":"Competency Matrix",
+  "مكتبة المصادر":"Resource Library", "تقييم الأداء":"Performance Evaluation", "التطور المهني":"Professional Development",
+  "خطة التطور المهني":"Development Plan", "تقييم الأداء الوظيفي":"Job Performance Evaluation",
+  "خطتي وتقييمي":"My Plan & Evaluation", "خطتي المهنية":"My Development Plan", "تقييم أدائي":"My Evaluation",
+  "متابعة المشرفين المختصين":"Specialist Supervisors", "طلبات الحسابات":"Account Requests",
+  "إدارة الترجمات":"Translations", "متابعة فريقي":"My Team",
+  // أزرار عامّة
+  "حفظ":"Save", "إلغاء":"Cancel", "إغلاق":"Close", "تعديل":"Edit", "حذف":"Delete", "إضافة":"Add",
+  "عرض":"View", "اعتماد":"Approve", "حفظ مؤقت":"Save Draft", "حفظ نهائي وقفل":"Finalize & Lock",
+  "تصفية":"Filter", "بحث":"Search", "تصدير":"Export", "استيراد":"Import", "طباعة":"Print",
+  "حفظ التقييم":"Save Evaluation", "تسجيل الدخول":"Login", "تسجيل الخروج":"Logout", "خروج":"Logout",
+  "تم":"Done", "تراجع":"Undo", "نسيت كلمة السر؟":"Forgot password?", "دخول":"Login",
+  "رجوع":"Back", "التالي":"Next", "السابق":"Previous", "موافق":"OK", "نعم":"Yes", "لا":"No",
+  // حقول النماذج
+  "الاسم":"Name", "الاسم *":"Name *", "اسم المستخدم":"Username", "اسم المستخدم *":"Username *",
+  "كلمة المرور":"Password", "كلمة المرور *":"Password *", "الصلاحية *":"Role *", "المسمى الوظيفي":"Job Title",
+  "المرحلة":"Stage", "الفرع":"Branch", "رقم الهوية":"National ID", "الرقم الوظيفي":"Employee No.",
+  "الموظفون":"Employees", "الموظف":"Employee",
+  // مستويات الأداء
+  "يفوق التوقعات":"Exceeds Expectations", "ممتاز":"Excellent", "جيد جداً":"Very Good",
+  "جيد":"Good", "دون التوقعات":"Below Expectations", "المتوسط العام":"Overall Average",
+  // حالات الخطة والتقييم
+  "تم التنفيذ":"Completed", "جاري التنفيذ":"In Progress", "لم يبدأ":"Not Started", "جاري":"In Progress",
+  "معتمدة":"Approved", "مسودّة":"Draft", "مفتوح":"Open", "مغلق":"Closed", "انتهت المدة":"Expired",
+  "لم يُقيّم":"Not Evaluated", "بانتظار الاعتماد":"Pending Approval", "بانتظار":"Pending",
+  // أطراف التقييم
+  "التقييم الذاتي":"Self-Assessment", "زملاء التخصص":"Peers", "المتابع الفني":"Technical Supervisor",
+  "المدير المباشر":"Direct Manager", "المرؤوسون":"Subordinates", "المستفيدون":"Beneficiaries",
+  // مؤشّرات اللوحة
+  "نسبة التخطيط":"Planning Rate", "نسبة الاعتماد":"Approval Rate", "نسبة التنفيذ":"Execution Rate",
+  "قياس الأثر":"Impact Measurement", "خطط مكتملة":"Completed Plans", "الميزانية المعتمدة":"Approved Budget",
+  "اكتمال التقييم":"Evaluation Completion", "متوسّط الأداء العام":"Overall Average", "الانحراف المعياري":"Std. Deviation",
+  "مكتملو التقييم":"Evaluated", "توزيع مستويات الأداء":"Performance Distribution", "البنود المكتملة":"Completed Items",
+  // مسمّيات وظيفية
+  "مدير النظام":"System Admin", "إدارة تنفيذية":"Executive", "مدير عام فرع":"Branch Manager",
+  "مدير مرحلة":"Stage Manager", "وكيل":"Deputy", "معلم":"Teacher", "إداري":"Administrator",
+  "مشرف مختص":"Specialist Supervisor", "المشرف التعليمي":"Educational Supervisor", "مدير فرع":"Branch Manager",
+  // فئات الجدارات
+  "أساسية":"Core", "عامة":"General", "فنية":"Technical",
+};
+
+// t(نصّ عربي): يُرجع الترجمة إن كانت اللغة إنجليزية ووُجدت، وإلا النصّ العربي كما هو
+function t(s) {
+  try {
+    if (typeof window==="undefined" || !window.__I18N || window.__I18N.lang!=="en") return s;
+    const d = window.__I18N.dict || {};
+    return d[s] || I18N_SEED[s] || s;   // القاموس المُدار له الأولوية، ثم البذرة، ثم العربية
+  } catch { return s; }
+}
+// اسم بديل يُستخدم داخل حلقات .map التي تسمّي متغيّرها t (تفادياً للتظليل)
+const tr = t;
+// تبديل اللغة (يُحدّث النافذة ويُطلق حدثاً لإعادة التصيير)
+function setAppLang(lang) {
+  if (typeof window==="undefined") return;
+  window.__I18N.lang = lang;
+  try { window.localStorage && window.localStorage.setItem("andlus_lang", lang); } catch {}
+  try { window.dispatchEvent(new Event("andlus-lang-change")); } catch {}
+}
+// خطّاف لإعادة التصيير عند تبديل اللغة
+function useAppLang() {
+  const [lang,setLang] = useState(()=>{ try { return (typeof window!=="undefined" && window.__I18N && window.__I18N.lang) || "ar"; } catch { return "ar"; } });
+  useEffect(()=>{
+    const h = ()=>setLang(window.__I18N.lang);
+    window.addEventListener("andlus-lang-change", h);
+    return ()=>window.removeEventListener("andlus-lang-change", h);
+  },[]);
+  return lang;
+}
 
 // ب-4: التقييم الثاني — الجولة الثانية تُخزَّن في empEval.__r2 (نسخة كاملة مستقلّة)
 // درجة موظف من كائن تقييم معيّن (جولة واحدة)
@@ -1309,7 +1390,7 @@ function EvalForm({ partyKey, targetUser, existingScores, onSave, onCancel, lock
   })();
 
   const handleSave = () => {
-  if(missingWitness){ return; } // زر الحفظ معطّل أصلاً، حماية إضافية
+  // الحفظ المؤقت متاح دائماً (الشاهد يُشترط فقط عند القفل النهائي)
   const payload = {...scores, __witnesses: witnesses, __witnessFiles: witnessFiles };
   onSave(payload);
   };
@@ -1505,18 +1586,20 @@ function EvalForm({ partyKey, targetUser, existingScores, onSave, onCancel, lock
   )}
 
   <div style={{display:"flex",gap:10,marginTop:8,position:"sticky",bottom:0,background:"#FFFFFF",padding:"12px 0",borderTop:"1px solid #C7DBF0",flexDirection:"column"}}>
-  {missingWitness&&<div style={{fontSize:11,color:"#F59E0B",fontWeight:700,textAlign:"center",background:"#F59E0B12",padding:"7px",borderRadius:8}}>⚠️ يوجد بند بالدرجة 5 بلا شاهد صالح — أدرج رابطاً أو توضيحاً (50–150 حرف) لكل درجة كاملة قبل الحفظ.</div>}
+  {missingWitness&&<div style={{fontSize:11,color:"#F59E0B",fontWeight:700,textAlign:"center",background:"#F59E0B12",padding:"7px",borderRadius:8}}>⚠️ يوجد بند بالدرجة 5 بلا شاهد صالح — أدرج رابطاً أو توضيحاً (50–150 حرف) أو مرفقاً لكل درجة كاملة قبل الحفظ النهائي.</div>}
+  {scoredItems>0&&scoredItems<totalItems&&<div style={{fontSize:11,color:"#2E7FB8",fontWeight:700,textAlign:"center",background:"#2E7FB80D",padding:"7px",borderRadius:8}}>💡 يمكنك الحفظ المؤقت الآن ({scoredItems} من {totalItems})، والحفظ النهائي يتاح عند اكتمال جميع البنود.</div>}
   <div style={{display:"flex",gap:10}}>
   <button onClick={onCancel} style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid #C7DBF0",background:"transparent",color:"#5B7A9E",cursor:"pointer"}}>إغلاق</button>
   {!isLocked ? (
    <>
-   <button onClick={handleSave} disabled={scoredItems===0||missingWitness}
-  style={{flex:2,padding:"10px",borderRadius:10,border:"none",background:(scoredItems>0&&!missingWitness)?"linear-gradient(135deg,#10B981,#059669)":"#DDE9F5",color:(scoredItems>0&&!missingWitness)?"#fff":"#C7DBF0",fontWeight:700,cursor:(scoredItems>0&&!missingWitness)?"pointer":"default",fontSize:13}}>
+   <button onClick={handleSave} disabled={scoredItems===0}
+  style={{flex:2,padding:"10px",borderRadius:10,border:"none",background:scoredItems>0?"linear-gradient(135deg,#10B981,#059669)":"#DDE9F5",color:scoredItems>0?"#fff":"#C7DBF0",fontWeight:700,cursor:scoredItems>0?"pointer":"default",fontSize:13}}>
   💾 حفظ مؤقت ({scoredItems} بند)
    </button>
-   <button onClick={()=>scoredItems>0&&!missingWitness&&setShowLockConfirm(true)} disabled={scoredItems===0||missingWitness}
-  style={{flex:2,padding:"10px",borderRadius:10,border:"none",background:(scoredItems>0&&!missingWitness)?"linear-gradient(135deg,#DC2626,#EF4444)":"#DDE9F5",color:(scoredItems>0&&!missingWitness)?"#fff":"#C7DBF0",fontWeight:700,cursor:(scoredItems>0&&!missingWitness)?"pointer":"default",fontSize:13}}>
-  🔒 حفظ وقفل
+   <button onClick={()=>scoredItems===totalItems&&!missingWitness&&setShowLockConfirm(true)} disabled={scoredItems!==totalItems||missingWitness}
+  title={scoredItems!==totalItems?"أكمل تقييم جميع البنود أولاً":(missingWitness?"أكمل شواهد الدرجات الكاملة":"")}
+  style={{flex:2,padding:"10px",borderRadius:10,border:"none",background:(scoredItems===totalItems&&!missingWitness)?"linear-gradient(135deg,#DC2626,#EF4444)":"#DDE9F5",color:(scoredItems===totalItems&&!missingWitness)?"#fff":"#C7DBF0",fontWeight:700,cursor:(scoredItems===totalItems&&!missingWitness)?"pointer":"default",fontSize:13}}>
+  🔒 حفظ نهائي وقفل
    </button>
    </>
   ) : (
@@ -1658,7 +1741,7 @@ function CompetenciesEditor({ comps, jobs, onSaveComps, onSaveJobs, onReset, rol
 
    <div style={{display:"flex",gap:6,marginBottom:14}}>
   {[{k:"comps",l:"📋 الجدارات والبنود"},{k:"jobs",l:"💼 المسميات الوظيفية"}].map(t=>(
-  <button key={t.k} onClick={()=>setSubTab(t.k)} style={{padding:"8px 18px",borderRadius:10,border:`1px solid ${subTab===t.k?"#3B82F6":"#DDE9F5"}`,background:subTab===t.k?"#3B82F620":"#FFFFFF",color:subTab===t.k?"#3B82F6":"#5B7A9E",fontSize:12,fontWeight:700,cursor:"pointer"}}>{t.l}</button>
+  <button key={t.k} onClick={()=>setSubTab(t.k)} style={{padding:"8px 18px",borderRadius:10,border:`1px solid ${subTab===t.k?"#3B82F6":"#DDE9F5"}`,background:subTab===t.k?"#3B82F620":"#FFFFFF",color:subTab===t.k?"#3B82F6":"#5B7A9E",fontSize:12,fontWeight:700,cursor:"pointer"}}>{tr(t.l)}</button>
   ))}
    </div>
 
@@ -2013,7 +2096,7 @@ function Card360({ targetUser, empEval, onSaveIdp, idpData, onClose, readings, o
   {/* تبويبات — الموظف يجد المصادر والخطة في تبويب "خطة التطور المهني" بلوحته */}
   <div style={{display:"flex",gap:4,marginBottom:14,borderBottom:"1px solid #DDE9F5",paddingBottom:8}}>
   {[{k:"scores",l:"📊 تفصيل النتائج"},{k:"summary",l:"📈 ترتيب الجدارات"},{k:"witnesses",l:"📎 الشواهد"}].map(t=>(
-   <button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"6px 14px",borderRadius:8,border:"none",background:tab===t.k?"#3B82F620":"transparent",color:tab===t.k?"#3B82F6":"#5B7A9E",fontSize:12,fontWeight:600,cursor:"pointer",borderBottom:tab===t.k?"2px solid #3B82F6":"2px solid transparent"}}>{t.l}</button>
+   <button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"6px 14px",borderRadius:8,border:"none",background:tab===t.k?"#3B82F620":"transparent",color:tab===t.k?"#3B82F6":"#5B7A9E",fontSize:12,fontWeight:600,cursor:"pointer",borderBottom:tab===t.k?"2px solid #3B82F6":"2px solid transparent"}}>{tr(t.l)}</button>
   ))}
   </div>
 
@@ -2686,7 +2769,7 @@ function BranchManagerPanel({ user, onLogout }) {
   <div style={{display:"flex",gap:6}}>
    <PrintButton title={`تقرير فرع ${user.branch}`} branch={user.branch}/>
    <ChangePasswordButton userId={user.id} currentPassword={user.password}/>
-   <RefreshButton onRefresh={loadData}/><button onClick={onLogout} style={{padding:"5px 12px",borderRadius:20,border:"1px solid #EF444430",background:"#EF444410",color:"#EF4444",fontSize:11,cursor:"pointer",marginRight:6}}>خروج</button>
+   <LangToggle/><RefreshButton onRefresh={loadData}/><button onClick={onLogout} style={{padding:"5px 12px",borderRadius:20,border:"1px solid #EF444430",background:"#EF444410",color:"#EF4444",fontSize:11,cursor:"pointer",marginRight:6}}>{t("خروج")}</button>
   </div>
   </div>
    </header>
@@ -3120,7 +3203,7 @@ function BranchRowEditModal({ emp, row, onSave, onClose }) {
   setUrl(s.url||""); setTrainMethod(s.method||s.type||"");
   setMode("edit");
   };
-  const save = () => onSave({programName,provider,cost,hours,url,trainMethod,evalMethod,targetDate});
+  const save = () => onSave({...row, programName,provider,cost,hours,url,trainMethod,evalMethod,targetDate});
 
   return(
   <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
@@ -3299,17 +3382,33 @@ function LibraryManager({ onSave }) {
    }
    // مطابقة مرنة للاسم: نجرّب عدّة ترويسات محتملة، وإن لم نجد نأخذ أول عمود غير فارغ
    const pick=(r,keys)=>{ for(const k of keys){ if(r[k]!=null&&String(r[k]).trim()) return String(r[k]).trim(); } return ""; };
+   // تطبيع النوع ليطابق خيارات القائمة (دورة/كتاب)
+   const normType=(v)=>{ const s=String(v||"").trim(); if(!s) return "دورة"; if(/كتاب|قراءة|book|read/i.test(s)) return "كتاب"; return "دورة"; };
+   // تطبيع الأسلوب ليطابق الخيارات الأربعة
+   const METHODS=["داخلي حضوري أو عن بعد","خارجي حضوري أو عن بعد","إلكتروني","قراءة"];
+   const normMethod=(v)=>{
+    const s=String(v||"").trim(); if(!s) return "إلكتروني";
+    if(METHODS.includes(s)) return s;                          // مطابقة تامّة
+    if(/داخل|internal/i.test(s)) return "داخلي حضوري أو عن بعد";
+    if(/خارج|external/i.test(s)) return "خارجي حضوري أو عن بعد";
+    if(/قراءة|كتاب|read/i.test(s)) return "قراءة";
+    if(/إلكترون|الكترون|online|e-?learn|رقمي/i.test(s)) return "إلكتروني";
+    if(/حضور|عن بعد|عن بُعد|افتراض|إفتراض/i.test(s)) return "خارجي حضوري أو عن بعد";
+    return "إلكتروني";
+   };
+   // استخراج رقم من نصّ قد يحوي وحدات ("40 ساعة"، "500 ريال"، "1,200")
+   const numOf=(v)=>{ const m=String(v==null?"":v).replace(/[,،]/g,"").match(/\d+(\.\d+)?/); return m?Number(m[0]):0; };
    const norm=parsed.map((r,i)=>{
     const name=pick(r,["name","الاسم","اسم المصدر","المصدر","البرنامج","اسم البرنامج","العنوان"]) || (Object.values(r).find(v=>v&&String(v).trim())||"");
     return {
      id:Date.now()+i,
-     type:pick(r,["type","النوع","نوع المصدر"])||"دورة",
-     method:pick(r,["method","الأسلوب","أسلوب"])||"إلكتروني",
+     type:normType(pick(r,["type","النوع","نوع المصدر"])),
+     method:normMethod(pick(r,["method","الأسلوب","أسلوب","طريقة"])),
      name:String(name).trim(),
      provider:pick(r,["provider","الجهة","المزوّد","المزود","الجهة المقدّمة"]),
      url:pick(r,["url","الرابط","رابط"]),
-     hours:Number(pick(r,["hours","الساعات","عدد الساعات"])||0)||0,
-     cost:Number(pick(r,["cost","التكلفة","الكلفة","السعر"])||0)||0,
+     hours:numOf(pick(r,["hours","الساعات","عدد الساعات","ساعات"])),
+     cost:numOf(pick(r,["cost","التكلفة","الكلفة","السعر","الكلفة التقديرية"])),
     };
    }).filter(r=>r.name.trim());
    if(!norm.length){ setImportErr("لم يُعثر على بيانات صالحة — تأكّد من وجود عمود لاسم المصدر"); return; }
@@ -3345,7 +3444,7 @@ function LibraryManager({ onSave }) {
 
    <div style={{display:"flex",gap:6,marginBottom:12}}>
   {[{k:"list",l:"📋 المصادر"},{k:"links",l:"🔗 الربط بالجدارات"}].map(t=>(
-  <button key={t.k} onClick={()=>setSubTab(t.k)} style={{padding:"7px 16px",borderRadius:10,border:`1px solid ${subTab===t.k?"#3B82F6":"#DDE9F5"}`,background:subTab===t.k?"#3B82F620":"#FFFFFF",color:subTab===t.k?"#3B82F6":"#5B7A9E",fontSize:12,fontWeight:700,cursor:"pointer"}}>{t.l}</button>
+  <button key={t.k} onClick={()=>setSubTab(t.k)} style={{padding:"7px 16px",borderRadius:10,border:`1px solid ${subTab===t.k?"#3B82F6":"#DDE9F5"}`,background:subTab===t.k?"#3B82F620":"#FFFFFF",color:subTab===t.k?"#3B82F6":"#5B7A9E",fontSize:12,fontWeight:700,cursor:"pointer"}}>{tr(t.l)}</button>
   ))}
    </div>
 
@@ -3569,6 +3668,16 @@ function LibraryManager({ onSave }) {
 
 const scopeBranches = (u) => (u.branches&&u.branches.length) ? u.branches : (u.branch?[u.branch]:[]);
 // زر تحديث يدوي + عدّاد — يعيد قراءة البيانات دون إعادة تحميل الصفحة (حتى لا يخرج المستخدم)
+function LangToggle() {
+  const lang = useAppLang();
+  return (
+  <button onClick={()=>setAppLang(lang==="ar"?"en":"ar")} title={lang==="ar"?"Switch to English":"التبديل إلى العربية"}
+   style={{padding:"5px 12px",borderRadius:20,border:"1px solid #7C3AED40",background:"#7C3AED10",color:"#7C3AED",fontSize:11,cursor:"pointer",marginRight:6,fontWeight:700}}>
+   🌐 {lang==="ar"?"English":"عربي"}
+  </button>
+  );
+}
+
 function RefreshButton({ intervalSec = 30, onRefresh }) {
   const [count, setCount] = React.useState(intervalSec);
   const [spinning, setSpinning] = React.useState(false);
@@ -4108,7 +4217,7 @@ function ExecGrowthReport({ users, idps, approvals, impactData, onOpenPlan }) {
   {/* الحقول الستة */}
   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:8}}>
    <div><label style={lbl}>📅 تاريخ التنفيذ</label><input type="date" value={cd.actualDate||""} onChange={e=>setCourseData(c.name,emp.id,{actualDate:e.target.value})} style={{...iS,width:"100%"}}/></div>
-   <div><label style={lbl}>📍 مكان التنفيذ</label><input value={cd.location||""} onChange={e=>setCourseData(c.name,emp.id,{location:e.target.value})} placeholder="القاعة/الفرع..." style={{...iS,width:"100%"}}/></div>
+   <div><label style={lbl}>📍 مكان التنفيذ (قاعة أو رابط اجتماع)</label><input value={cd.location||""} onChange={e=>setCourseData(c.name,emp.id,{location:e.target.value})} placeholder="اسم القاعة للحضوري، أو الصق رابط الاجتماع للتدريب عن بُعد" style={{...iS,width:"100%"}}/>{/^https?:\/\//i.test(String(cd.location||"").trim())&&<a href={cd.location} target="_blank" rel="noopener noreferrer" style={{fontSize:10,color:"#3B82F6",fontWeight:700,textDecoration:"none",display:"inline-block",marginTop:4}}>🔗 فتح رابط الاجتماع</a>}</div>
    <div><label style={lbl}>👨‍🏫 اسم المدرب</label><input value={cd.trainer||""} onChange={e=>setCourseData(c.name,emp.id,{trainer:e.target.value})} placeholder="اسم المدرب" style={{...iS,width:"100%"}}/></div>
    <div><label style={lbl}>🔄 حالة التنفيذ</label>
    <select value={cd.status||""} onChange={e=>setCourseData(c.name,emp.id,{status:e.target.value})} style={{...iS,width:"100%"}}>
@@ -4355,7 +4464,7 @@ function AnalyticsDashboard({ scope, evals, idps, impactData, unitLabel="فرع"
    {/* تبديل النمط (يختفي عند الدمج) + الفلتر */}
    <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
    {!fixedMode&&[{k:"growth",l:"🎯 التطور المهني",c:"#10B981"},{k:"eval",l:"📊 تقييم الأداء",c:"#2E7FB8"}].map(t=>(
-   <button key={t.k} onClick={()=>setMode(t.k)} style={{padding:"10px 20px",borderRadius:24,border:"none",background:mode===t.k?`linear-gradient(135deg,${t.c},${t.c}cc)`:"#fff",color:mode===t.k?"#fff":"#5B7A9E",fontSize:13,fontWeight:800,cursor:"pointer",boxShadow:mode===t.k?`0 6px 18px ${t.c}45`:"0 2px 8px rgba(46,127,184,0.08)"}}>{t.l}</button>
+   <button key={t.k} onClick={()=>setMode(t.k)} style={{padding:"10px 20px",borderRadius:24,border:"none",background:mode===t.k?`linear-gradient(135deg,${t.c},${t.c}cc)`:"#fff",color:mode===t.k?"#fff":"#5B7A9E",fontSize:13,fontWeight:800,cursor:"pointer",boxShadow:mode===t.k?`0 6px 18px ${t.c}45`:"0 2px 8px rgba(46,127,184,0.08)"}}>{tr(t.l)}</button>
    ))}
    {fixedMode&&<div style={{fontSize:14,fontWeight:900,color:mode==="growth"?"#10B981":"#2E7FB8"}}>{mode==="growth"?"🎯 لوحة متابعة التطور المهني":"📊 لوحة متابعة تقييم الأداء"}</div>}
    <div style={{flex:1}}/>
@@ -4443,7 +4552,84 @@ function AnalyticsDashboard({ scope, evals, idps, impactData, unitLabel="فرع"
 }
 
 
-function AdminPanel({ onLogout }) {
+// ═══ إدارة الترجمات (ثنائية اللغة) — لمدير النظام ═══
+function TranslationsManager({ onSave, showToast }) {
+  const [dict,setDict] = useState(()=>{ try { return {...I18N_SEED, ...((window.__I18N&&window.__I18N.dict)||{})}; } catch { return {...I18N_SEED}; } });
+  const [search,setSearch] = useState("");
+  const [newAr,setNewAr] = useState("");
+  const keys = Object.keys(dict).sort((a,b)=>a.localeCompare(b,"ar"));
+  const filtered = search.trim() ? keys.filter(k=>k.includes(search)||String(dict[k]||"").toLowerCase().includes(search.toLowerCase())) : keys;
+  const setVal = (ar,en)=>setDict(p=>({...p,[ar]:en}));
+  const addRow = ()=>{ const a=newAr.trim(); if(a&&!dict[a]){ setDict(p=>({...p,[a]:""})); setNewAr(""); } };
+  const save = async ()=>{
+    // نُبقي فقط ما له ترجمة إنجليزية غير فارغة (لتقليل الحجم)، لكن نحتفظ بالمفاتيح للمرجع
+    if (typeof window!=="undefined") window.__I18N.dict = dict;
+    await onSave(dict);
+    showToast && showToast("✓ حُفظت الترجمات — ستظهر عند تبديل اللغة");
+  };
+  const translated = keys.filter(k=>dict[k]&&dict[k].trim()).length;
+
+  const exportJson = ()=>{
+    try {
+      const blob = new Blob([JSON.stringify(dict,null,2)], {type:"application/json"});
+      const url = URL.createObjectURL(blob); const a=document.createElement("a");
+      a.href=url; a.download="andlus-translations.json"; a.click(); URL.revokeObjectURL(url);
+    } catch {}
+  };
+  const importJson = (file)=>{
+    if(!file) return;
+    const r=new FileReader();
+    r.onload=()=>{ try { const o=JSON.parse(r.result); if(o&&typeof o==="object"){ setDict(p=>({...p,...o})); showToast&&showToast("✓ حُمّل الملف — راجع ثم احفظ"); } } catch { showToast&&showToast("⚠️ ملف غير صالح","#EF4444"); } };
+    r.readAsText(file);
+  };
+
+  const iS={width:"100%",padding:"8px 10px",background:"#F4F9FE",border:"1px solid #DDE9F5",borderRadius:8,color:"#15385C",fontSize:12,boxSizing:"border-box",direction:"ltr",textAlign:"left"};
+  return (
+  <div>
+   <div style={{background:"#8B5CF60D",border:"1px solid #8B5CF630",borderRadius:14,padding:"16px 18px",marginBottom:16}}>
+   <div style={{fontSize:15,fontWeight:900,color:"#7C3AED",marginBottom:6}}>🌐 إدارة الترجمة الإنجليزية</div>
+   <div style={{fontSize:12,color:"#5B7A9E",lineHeight:1.8}}>
+   أدخل الترجمة الإنجليزية لكل مصطلح عربي. تُسقَط تلقائياً على كل أيقونات النظام عند تبديل اللغة إلى English.
+   المصطلحات المترجمة: <strong style={{color:"#7C3AED"}}>{translated}</strong> من {keys.length}.
+   </div>
+   </div>
+
+   <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+   <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 بحث في المصطلحات..." style={{flex:"1 1 200px",padding:"9px 12px",background:"#fff",border:"1px solid #DDE9F5",borderRadius:10,fontSize:12,boxSizing:"border-box"}}/>
+   <button onClick={exportJson} style={{padding:"9px 14px",borderRadius:10,border:"1px solid #2E7FB840",background:"#2E7FB810",color:"#2E7FB8",fontSize:12,fontWeight:700,cursor:"pointer"}}>⬇️ تنزيل JSON</button>
+   <label style={{padding:"9px 14px",borderRadius:10,border:"1px solid #10B98140",background:"#10B98110",color:"#059669",fontSize:12,fontWeight:700,cursor:"pointer"}}>⬆️ رفع ملف<input type="file" accept=".json" onChange={e=>importJson(e.target.files?.[0])} style={{display:"none"}}/></label>
+   <button onClick={save} style={{padding:"9px 18px",borderRadius:10,border:"none",background:"linear-gradient(135deg,#7C3AED,#8B5CF6)",color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer"}}>💾 حفظ الترجمات</button>
+   </div>
+
+   {/* إضافة مصطلح جديد */}
+   <div style={{display:"flex",gap:8,marginBottom:14,alignItems:"center",background:"#fff",border:"1px dashed #C7DBF0",borderRadius:10,padding:"10px 12px"}}>
+   <input value={newAr} onChange={e=>setNewAr(e.target.value)} placeholder="أضف مصطلحاً عربيّاً جديداً..." style={{flex:1,padding:"8px 10px",background:"#F4F9FE",border:"1px solid #DDE9F5",borderRadius:8,fontSize:12,boxSizing:"border-box"}}/>
+   <button onClick={addRow} disabled={!newAr.trim()} style={{padding:"8px 16px",borderRadius:8,border:"none",background:newAr.trim()?"#2E7FB8":"#DDE9F5",color:newAr.trim()?"#fff":"#94A3B8",fontSize:12,fontWeight:700,cursor:newAr.trim()?"pointer":"default"}}>➕ إضافة</button>
+   </div>
+
+   {/* الجدول */}
+   <div style={{background:"#fff",border:"1px solid #E8F0F9",borderRadius:14,overflow:"hidden"}}>
+   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0,background:"#F4F9FE",borderBottom:"1px solid #E8F0F9",padding:"10px 14px",fontSize:11,fontWeight:800,color:"#5B7A9E"}}>
+   <div>🇸🇦 المصطلح العربي</div><div style={{direction:"ltr",textAlign:"left"}}>🇬🇧 English Translation</div>
+   </div>
+   <div style={{maxHeight:480,overflowY:"auto"}}>
+   {filtered.map((k,i)=>(
+   <div key={k} style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,padding:"8px 14px",borderBottom:"1px solid #F4F9FE",alignItems:"center",background:i%2?"#FAFCFF":"#fff"}}>
+   <div style={{fontSize:12,color:"#15385C",fontWeight:600}}>{k}</div>
+   <input value={dict[k]||""} onChange={e=>setVal(k,e.target.value)} placeholder="Enter English..." style={iS}/>
+   </div>
+   ))}
+   {filtered.length===0&&<div style={{textAlign:"center",padding:24,color:"#8CA3BD",fontSize:12}}>لا مصطلحات مطابقة</div>}
+   </div>
+   </div>
+  </div>
+  );
+}
+
+function AdminPanel({ onLogout, assistant }) {
+  // مساعد مدير النظام: صلاحيات محدّدة (الحسابات + الدورات الحضورية فقط؛ مشاهدة الباقي بلا تعديل)
+  const isAssistant = !!assistant;
+  const canEditData = !isAssistant;   // المسمّيات/المكتبة/الجدارات/الصيانة/نوافذ التقييم — لمدير النظام فقط
   const [tab,setTab] = useState("users");
   const [users,setUsersState] = useState([]);
   const [evals,setEvalsState] = useState({});
@@ -4516,34 +4702,54 @@ function AdminPanel({ onLogout }) {
    if(/Ø|Ù|Ã|Â/.test(txt) && (txt.match(/[Ø|Ù]/g)||[]).length>5){ setEmpImportReport({error:"⚠️ النصّ مشوّه الترميز. انسخ من Excel والصق مباشرةً بدل CSV."}); return; }
    const norm=(s)=>String(s||"").replace(/\s+/g," ").trim();
    const lines=txt.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
-   // تخطّي صفّ العناوين إن وُجد
    const start = /الاسم|البريد|اسم المستخدم/.test(lines[0]) ? 1 : 0;
    const branchNorm={}; BRANCHES_LIST.forEach(b=>branchNorm[norm(b)]=b);
    const stageNorm={}; STAGES.forEach(s=>stageNorm[norm(s)]=s);
+   // خريطة المسمّى → الدور والنوع الفرعي
+   const roleMap = {
+     "معلم":{role:"employee",roleSubtype:"teacher"}, "اداري":{role:"employee",roleSubtype:"admin_staff"}, "إداري":{role:"employee",roleSubtype:"admin_staff"},
+     "معلم/اداري":{role:"employee",roleSubtype:"teacher"}, "معلم/إداري":{role:"employee",roleSubtype:"teacher"},
+     "متابع فني":{role:"supervisor",roleSubtype:"specialist"}, "مشرف مختص":{role:"supervisor",roleSubtype:"specialist"},
+     "وكيل":{role:"deputy",roleSubtype:"general"}, "مدير مرحلة":{role:"stage_mgr",roleSubtype:""}, "مدير مباشر":{role:"stage_mgr",roleSubtype:""},
+     "مدير فرع":{role:"branch_mgr",roleSubtype:""}, "مدير عام فرع":{role:"branch_mgr",roleSubtype:""},
+     "مشرف تعليمي":{role:"branch_ext",roleSubtype:"edu_excellence"},
+   };
+   // نبني فهرس البريد→id لربط المتابع/المدير
+   const emailToId = {}; (users||[]).forEach(u=>{ if(u.username) emailToId[norm(u.username).toLowerCase()]=u.id; });
    let ok=0, created=[], errors=[];
    const existing = new Set((users||[]).map(u=>u.username));
    for(let i=start;i<lines.length;i++){
-    const cells=lines[i].split(/\t|,،/).map(norm);
-    const [name,username,password,branchRaw,stageRaw,jobRaw,jobNumber,nationalId]=cells;
+    const cells=lines[i].split(/\t/).map(norm);   // Tab فقط (اللصق من Excel) — الفاصلة قد تكون داخل النصّ
+    // الأعمدة: الاسم | البريد | كلمة المرور | الفرع | المرحلة | المسمّى | الرقم الوظيفي | الهوية | بريد المتابع الفني | بريد المدير المباشر
+    const [name,username,password,branchRaw,stageRaw,jobRaw,jobNumber,nationalId,supEmail,mgrEmail]=cells;
     if(!name||!username){ errors.push(`سطر ${i+1}: الاسم والبريد مطلوبان`); continue; }
-    const cleanU=String(username).replace(/[\u200B-\u200F\u202A-\u202E\uFEFF]/g,"").trim();
+    const cleanU=String(username).replace(/[\u200B-\u200F\u202A-\u202E\uFEFF]/g,"").trim().toLowerCase();
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanU)){ errors.push(`سطر ${i+1} (${name}): بريد غير صحيح`); continue; }
     if(existing.has(cleanU)){ errors.push(`سطر ${i+1} (${name}): البريد مستخدم`); continue; }
-    // مطابقة الفرع والمرحلة مع القوائم (حلّ مشكلة القوائم المنسدلة)
     const branch = branchNorm[norm(branchRaw)] || branchRaw;
     const stage = stageNorm[norm(stageRaw)] || stageRaw || "";
-    const job = jobRaw || "معلم";
-    const newU={ name, username:cleanU, password:password||"Andalus@123", role:"employee", roleSubtype:"",
-      job, branch, stage, jobNumber:jobNumber||"", nationalId:nationalId||"", peerIds:[] };
+    // الدور من المسمّى (افتراضياً معلم)
+    const jobKey = norm(jobRaw||"معلم");
+    const rr = roleMap[jobKey] || {role:"employee",roleSubtype:"teacher"};
+    // ربط المتابع الفني والمدير المباشر بالبريد
+    const supervisorId = supEmail ? (emailToId[norm(supEmail).toLowerCase()]||"") : "";
+    const stageManagerId = mgrEmail ? (emailToId[norm(mgrEmail).toLowerCase()]||"") : "";
+    if(supEmail && !supervisorId) errors.push(`سطر ${i+1} (${name}): لم يُعثر على المتابع الفني بالبريد ${supEmail}`);
+    if(mgrEmail && !stageManagerId) errors.push(`سطر ${i+1} (${name}): لم يُعثر على المدير المباشر بالبريد ${mgrEmail}`);
+    const newU={ id:(Date.now().toString()+Math.floor(Math.random()*1000)), name, username:cleanU, password:password||"Andalus@123",
+      role:rr.role, roleSubtype:rr.roleSubtype,
+      job:(rr.role==="employee"?(rr.roleSubtype==="admin_staff"?"إداري":"معلم"):(jobRaw||"")),
+      branch, stage, jobNumber:jobNumber||"", nationalId:nationalId||"",
+      supervisorId, stageManagerId, peerIds:[] };
     try{
      if(typeof window.andlusAPI?.createUser==="function") await window.andlusAPI.createUser(newU);
-     created.push(newU); existing.add(cleanU); ok++;
+     created.push(newU); existing.add(cleanU); emailToId[cleanU]=newU.id; ok++;
     }catch(e){ errors.push(`سطر ${i+1} (${name}): ${e?.message||"تعذّر الإنشاء"}`); }
    }
    if(created.length){
     try{ await persistUsers([...(users||[]),...created]); const fresh=await st.get("users_360c"); if(Array.isArray(fresh)) setUsersState(fresh); }catch(e){}
    }
-   setEmpImportReport({ ok, total:lines.length-start, errors:errors.slice(0,25), errorsTotal:errors.length });
+   setEmpImportReport({ ok, total:lines.length-start, errors:errors.slice(0,30), errorsTotal:errors.length });
    if(ok) showToast(`✓ أُنشئ ${ok} حساباً`);
   };
 
@@ -4619,14 +4825,14 @@ function AdminPanel({ onLogout }) {
   </div>
   <div style={{display:"flex",gap:5}}>
 
-   {[{k:"users",i:"👥",l:"الحسابات",c:"#EC4899"},{k:"evals",i:"📊",l:"متابعة تقييم الأداء",c:"#8B5CF6"},{k:"report",i:"🎯",l:"متابعة التطور المهني",c:"#06B6D4"},{k:"competencies",i:"🗂️",l:"مصفوفة الجدارات",c:"#F59E0B"},{k:"library",i:"📖",l:"مكتبة المصادر",c:"#10B981"}].map(t=>(
+   {[{k:"users",i:"👥",l:"الحسابات",c:"#EC4899"},{k:"evals",i:"📊",l:"متابعة تقييم الأداء",c:"#8B5CF6"},{k:"report",i:"🎯",l:"متابعة التطور المهني",c:"#06B6D4"},{k:"competencies",i:"🗂️",l:"مصفوفة الجدارات",c:"#F59E0B"},{k:"library",i:"📖",l:"مكتبة المصادر",c:"#10B981"},{k:"i18n",i:"🌐",l:"إدارة الترجمات",c:"#7C3AED"}].map(t=>(
    <button key={t.k} onClick={()=>setTab(t.k)} style={{display:"flex",alignItems:"center",gap:7,padding:"8px 16px",borderRadius:24,border:"none",background:tab===t.k?`linear-gradient(135deg,${t.c},${t.c}cc)`:"#fff",color:tab===t.k?"#fff":"#5B7A9E",fontSize:12,fontWeight:tab===t.k?800:600,cursor:"pointer",boxShadow:tab===t.k?`0 6px 18px ${t.c}45`:"0 2px 8px rgba(46,127,184,0.08)"}}>
-  <span style={{fontSize:14}}>{t.i}</span>{t.l}
+  <span style={{fontSize:14}}>{t.i}</span>{tr(t.l)}
    </button>
    ))}
    <PrintButton title="لوحة مدير النظام" branch="جميع الفروع"/>
    <AdminChangePasswordButton/>
-   <RefreshButton onRefresh={loadData}/><button onClick={onLogout} style={{padding:"5px 11px",borderRadius:20,border:"1px solid #EF444430",background:"#EF444410",color:"#EF4444",fontSize:11,cursor:"pointer",marginRight:6}}>خروج</button>
+   <LangToggle/><RefreshButton onRefresh={loadData}/><button onClick={onLogout} style={{padding:"5px 11px",borderRadius:20,border:"1px solid #EF444430",background:"#EF444410",color:"#EF4444",fontSize:11,cursor:"pointer",marginRight:6}}>{t("خروج")}</button>
   </div>
   </div>
    </header>
@@ -4669,7 +4875,7 @@ function AdminPanel({ onLogout }) {
   </div>
   ))}
   {[
-  {l:"الصلاحية *",k:"role",opts:[{v:"",l:"-- اختر --"},...Object.entries(ROLES_LIST).map(([v,l])=>({v,l}))]},
+
   ...(isDepartment(form.branch)?[]:[{l:"المرحلة",k:"stage",opts:[{v:"",l:"-- بدون --"},...STAGES.map(s=>({v:s,l:s}))]}]),
   {l:"المسمى الوظيفي",k:"job",opts:[{v:"",l:"-- اختر --"},...Object.keys(customJobs||getActiveJobs()).map(j=>({v:j,l:j}))]},
   ].map(f=>(
@@ -4706,8 +4912,8 @@ function AdminPanel({ onLogout }) {
   <MultiPick label="🏛️ الفروع التي يدعمها فنياً" hint="الامتداد الفني عادةً يدعم فرعين — اختر الفروع (يشمل الفرع أعلاه)" color="#F59E0B"
   options={BRANCHES_LIST.filter(b=>b!=="-- اختر الفرع --")} selected={form.branches} onChange={v=>setForm(p=>({...p,branches:v}))}/>
   )}
-  {form.role==="stage_mgr"&&(
-  <MultiPick label="📚 المراحل التابعة له" hint={`اختر مرحلة أو أكثر داخل فرع «${form.branch||"—"}»`} color="#10B981"
+  {(form.role==="stage_mgr"||form.role==="deputy")&&(
+  <MultiPick label="📚 المراحل التابعة له" hint={form.role==="deputy"?`اختر مرحلة أو أكثر يعمل بها الوكيل داخل فرع «${form.branch||"—"}»`:`اختر مرحلة أو أكثر داخل فرع «${form.branch||"—"}»`} color="#10B981"
   options={STAGES} selected={form.stages} onChange={v=>setForm(p=>({...p,stages:v}))}/>
   )}
   {form.role==="supervisor"&&(
@@ -4803,8 +5009,10 @@ function AdminPanel({ onLogout }) {
    <button onClick={()=>setViewUser(u)} style={{padding:"4px 9px",borderRadius:7,border:"1px solid #DDE9F5",background:"transparent",color:"#5B7A9E",fontSize:11,cursor:"pointer"}}>360°</button>
    </>
    )}
+   {!(isAssistant&&(u.role==="admin"||u.role==="admin_assistant"))&&(<>
    <button onClick={()=>setEditUser({...u})} style={{padding:"4px 9px",borderRadius:7,border:"1px solid #3B82F630",background:"#3B82F610",color:"#3B82F6",fontSize:11,cursor:"pointer"}}>تعديل</button>
    <button onClick={()=>setDelConfirm(u)} style={{padding:"4px 9px",borderRadius:7,border:"1px solid #EF444430",background:"#EF444410",color:"#EF4444",fontSize:11,cursor:"pointer"}}>حذف</button>
+   </>)}
   </div>
   </div>
   );
@@ -4838,7 +5046,8 @@ function AdminPanel({ onLogout }) {
 
   {tab==="evals"&&(
   <div style={{display:"flex",flexDirection:"column",gap:10}}>
-   {/* وضع الصيانة: تعطيل دخول جميع الحسابات عدا مدير النظام */}
+   {/* وضع الصيانة: تعطيل دخول جميع الحسابات عدا مدير النظام — لمدير النظام فقط */}
+   {canEditData&&(
    <div style={{background:maintMode.enabled?"#FEF2F2":"#FFFFFF",border:`1px solid ${maintMode.enabled?"#FCA5A5":"#E3EEF9"}`,borderRadius:14,padding:16}}>
    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:maintMode.enabled?10:0}}>
    <div>
@@ -4862,8 +5071,9 @@ function AdminPanel({ onLogout }) {
    </div>
    )}
    </div>
-   {/* أ) نوافذ التقييم لكل فرع */}
-   {(()=>{
+   )}
+   {/* أ) نوافذ التقييم لكل فرع — لمدير النظام فقط (المساعد لا يفتح/يغلق التقييم) */}
+   {canEditData&&(()=>{
    const today=new Date().toISOString().split("T")[0];
    const allBranches=[...new Set((users||[]).filter(u=>u.role==="employee").map(u=>u.branch).filter(Boolean))].sort();
    const winOf=(b)=>(evalWindow.branches||{})[b]||{isOpen:false,openDate:"",closeDate:""};
@@ -4962,7 +5172,7 @@ function AdminPanel({ onLogout }) {
   <>
   <AnalyticsDashboard scope={(users||[]).filter(u=>u.role!=="admin")} evals={evals} idps={idps} impactData={impactData} unitLabel="فرع" getUnit={(u)=>u.branch||"—"} fixedMode="growth"/>
   <details style={{marginTop:18,background:"#fff",border:"1px solid #E8F0F9",borderRadius:14,overflow:"hidden"}}>
-  <summary style={{padding:"14px 16px",cursor:"pointer",fontSize:13,fontWeight:800,color:"#10B981",listStyle:"none"}}>📋 تفاصيل خطط الموظفين حسب الفرع (اضغط للعرض)</summary>
+  <summary style={{padding:"14px 16px",cursor:"pointer",fontSize:13,fontWeight:800,color:"#10B981",listStyle:"none"}}>📋 تفاصيل خطط الموظفين وإدارة الدورات الحضورية (اضغط للعرض)</summary>
   <div style={{padding:"0 16px 16px"}}><ExecGrowthReport users={users||[]} idps={idps} approvals={approvals} impactData={impactData} onOpenPlan={(u)=>setViewPlanUser(u)}/></div>
   </details>
   </>
@@ -4970,23 +5180,30 @@ function AdminPanel({ onLogout }) {
   {tab==="library"&&(<>
   <LibraryManager
    onSave={async(sources,compMap)=>{
+   if(isAssistant){ showToast("🔒 هذه الصلاحية لمدير النظام فقط","#EF4444"); return; }
    setActiveSources(sources); setActiveCompMap(compMap);
    await st.setShared("customSources_360c", sources);
    await st.setShared("customSourceMap_360c", compMap);
    showToast("✓ تم حفظ المكتبة");
    }}
   />
-  <ProfCertsManager certs={getProfCerts()} onSave={async d=>{ setProfCerts(d); await st.setShared("profCerts_360c",d); showToast("✓ تم حفظ الشهادات"); }}/>
+  <ProfCertsManager certs={getProfCerts()} onSave={async d=>{ if(isAssistant){ showToast("🔒 هذه الصلاحية لمدير النظام فقط","#EF4444"); return; } setProfCerts(d); await st.setShared("profCerts_360c",d); showToast("✓ تم حفظ الشهادات"); }}/>
   </>)}
+  {tab==="i18n"&&(
+  <TranslationsManager
+   showToast={showToast}
+   onSave={async d=>{ if(isAssistant){ showToast("🔒 هذه الصلاحية لمدير النظام فقط","#EF4444"); return; } await st.setShared("i18n_360c", d); }}
+  />
+  )}
   {tab==="competencies"&&(<>
   <CompetenciesEditor
    comps={customComps||COMPETENCIES_WITH_ITEMS}
    jobs={customJobs||JOB_COMPETENCIES}
    roleItems={customRoleItems}
-   onSaveRoleItems={async d=>{setCustomRoleItems(d);setCompRoleItems(d); await st.setShared("compRoleItems_360c",d);showToast("✓ تم حفظ تعليم البنود");}}
-   onSaveComps={async d=>{setCustomComps(d);setActiveComps(d);COMPETENCIES_WITH_ITEMS=d; await st.setShared("customComps_360c",d);showToast("✓ تم حفظ الجدارات");}}
-   onSaveJobs={async d=>{setCustomJobs(d);setActiveJobs(d);JOB_COMPETENCIES=d; await st.setShared("customJobs_360c",d);showToast("✓ تم حفظ ربط المسميات");}}
-   onReset={async()=>{setCustomComps(null);setCustomJobs(null);setActiveComps(null);setActiveJobs(null);COMPETENCIES_WITH_ITEMS={}; JOB_COMPETENCIES={}; setActiveComps(null); setActiveJobs(null); await st.setShared("customComps_360c",null); await st.setShared("customJobs_360c",null);showToast("✓ تم الرجوع للإعدادات الافتراضية","#F97316");}}
+   onSaveRoleItems={async d=>{if(isAssistant){ showToast("🔒 هذه الصلاحية لمدير النظام فقط","#EF4444"); return; } setCustomRoleItems(d);setCompRoleItems(d); await st.setShared("compRoleItems_360c",d);showToast("✓ تم حفظ تعليم البنود");}}
+   onSaveComps={async d=>{if(isAssistant){ showToast("🔒 هذه الصلاحية لمدير النظام فقط","#EF4444"); return; } setCustomComps(d);setActiveComps(d);COMPETENCIES_WITH_ITEMS=d; await st.setShared("customComps_360c",d);showToast("✓ تم حفظ الجدارات");}}
+   onSaveJobs={async d=>{if(isAssistant){ showToast("🔒 هذه الصلاحية لمدير النظام فقط","#EF4444"); return; } setCustomJobs(d);setActiveJobs(d);JOB_COMPETENCIES=d; await st.setShared("customJobs_360c",d);showToast("✓ تم حفظ ربط المسميات");}}
+   onReset={async()=>{if(isAssistant){ showToast("🔒 هذه الصلاحية لمدير النظام فقط","#EF4444"); return; } setCustomComps(null);setCustomJobs(null);setActiveComps(null);setActiveJobs(null);COMPETENCIES_WITH_ITEMS={}; JOB_COMPETENCIES={}; await st.setShared("customComps_360c",null); await st.setShared("customJobs_360c",null);showToast("✓ تم الرجوع للإعدادات الافتراضية","#F97316");}}
   />
   </>)}
    </main>
@@ -5013,9 +5230,9 @@ function AdminPanel({ onLogout }) {
    <button onClick={()=>{setShowEmpImport(false);setEmpImportTxt("");setEmpImportReport(null);}} style={{background:"none",border:"none",color:"#5B7A9E",fontSize:20,cursor:"pointer"}}>✕</button>
    </div>
    <div style={{background:"#ECFDF5",borderRadius:10,padding:"12px 14px",marginBottom:12,fontSize:12,color:"#065F46",lineHeight:1.9}}>
-   <strong>للمعلمين والإداريين فقط.</strong> انسخ الأعمدة من Excel والصقها مباشرةً (بترتيب الأعمدة):<br/>
-   <code style={{display:"block",background:"#fff",padding:"8px 10px",borderRadius:6,marginTop:4,color:"#334155",fontSize:11}}>الاسم ⟨tab⟩ البريد ⟨tab⟩ كلمة المرور ⟨tab⟩ الفرع ⟨tab⟩ المرحلة ⟨tab⟩ المسمّى ⟨tab⟩ الرقم الوظيفي ⟨tab⟩ رقم الهوية</code>
-   <div style={{marginTop:8,fontSize:11}}>✓ الفرع والمرحلة يُطابَقان تلقائياً مع قوائم النظام (حلّ مشكلة القوائم المنسدلة) • ✓ إن تُركت كلمة المرور فارغة تُستخدم <code>Andalus@123</code> • ✓ المسمّى الافتراضي «معلم» • ✓ انسخ من Excel لا CSV لتفادي مشاكل الترميز.</div>
+   <strong>استيراد الحسابات دفعةً.</strong> انسخ الأعمدة من Excel والصقها مباشرةً (بهذا الترتيب):<br/>
+   <code style={{display:"block",background:"#fff",padding:"8px 10px",borderRadius:6,marginTop:4,color:"#334155",fontSize:11}}>الاسم ⟨tab⟩ البريد ⟨tab⟩ كلمة المرور ⟨tab⟩ الفرع ⟨tab⟩ المرحلة ⟨tab⟩ المسمّى ⟨tab⟩ الرقم الوظيفي ⟨tab⟩ رقم الهوية ⟨tab⟩ بريد المتابع الفني ⟨tab⟩ بريد المدير المباشر</code>
+   <div style={{marginTop:8,fontSize:11}}>✓ الفرع والمرحلة يُطابَقان تلقائياً مع قوائم النظام • ✓ كلمة المرور الافتراضية <code>Andalus@123</code> • ✓ المسمّى يحدّد الصلاحية: «معلم/إداري» أو «متابع فني» أو «وكيل» أو «مدير مرحلة» أو «مدير فرع» أو «مشرف تعليمي» • ✓ بريد المتابع/المدير يربطهما تلقائياً (يجب أن يكون حسابهما موجوداً) • ✓ انسخ من Excel لا CSV.</div>
    </div>
    <textarea value={empImportTxt} onChange={e=>setEmpImportTxt(e.target.value)} rows={10} placeholder="أحمد محمد⟨tab⟩ahmad@as.edu.sa⟨tab⟩⟨tab⟩أندلس الزهراء بنين⟨tab⟩ابتدائي⟨tab⟩معلم⟨tab⟩1234⟨tab⟩1012345678"
    style={{width:"100%",padding:"10px",background:"#F4F9FE",border:"1px solid #C7DBF0",borderRadius:8,color:"#1E293B",fontFamily:"monospace",fontSize:12,boxSizing:"border-box",resize:"vertical",direction:"rtl"}}/>
@@ -5044,7 +5261,7 @@ function AdminPanel({ onLogout }) {
    <button onClick={()=>setEditUser(null)} style={{background:"none",border:"none",color:"#5B7A9E",fontSize:20,cursor:"pointer"}}>✕</button>
    </div>
    <div style={{display:"flex",flexDirection:"column",gap:10}}>
-   {[{l:"الاسم",k:"name"},{l:"اسم المستخدم",k:"username"},{l:"كلمة المرور الجديدة",k:"password",t:"password",ph:"اتركه فارغاً للإبقاء"},{l:"🪪 رقم الهوية",k:"nationalId",ph:"رقم الهوية الوطنية"}].map(f=>(
+   {[{l:"الاسم",k:"name"},{l:"اسم المستخدم",k:"username"},{l:"كلمة المرور الجديدة",k:"password",t:"password",ph:"اتركه فارغاً للإبقاء"},{l:"🪪 رقم الهوية",k:"nationalId",ph:"رقم الهوية الوطنية"},{l:"🔢 الرقم الوظيفي",k:"jobNumber",ph:"4 أو 5 أرقام"}].map(f=>(
   <div key={f.k}><label style={{display:"block",fontSize:11,color:"#5B7A9E",marginBottom:4,fontWeight:700}}>{f.l}</label>
   <input value={editUser[f.k]||""} type={f.t||"text"} placeholder={f.ph||""} onChange={e=>setEditUser(p=>({...p,[f.k]:e.target.value}))}
   style={{width:"100%",padding:"8px 10px",background:"#F4F9FE",border:"1px solid #DDE9F5",borderRadius:8,color:"#1E293B",fontSize:12,boxSizing:"border-box"}}/></div>
@@ -5090,7 +5307,7 @@ function AdminPanel({ onLogout }) {
   <MultiPick label="🏛️ الفروع التي يدعمها فنياً" hint="الامتداد الفني عادةً يدعم فرعين" color="#F59E0B"
   options={BRANCHES_LIST.filter(b=>b!=="-- اختر الفرع --")} selected={editUser.branches} onChange={v=>setEditUser(p=>({...p,branches:v}))}/>
    )}
-   {editUser.role==="stage_mgr"&&(
+   {(editUser.role==="stage_mgr"||editUser.role==="deputy")&&(
   <MultiPick label="📚 المراحل التابعة له" hint={`اختر مرحلة أو أكثر داخل فرع «${editUser.branch||"—"}»`} color="#10B981"
   options={STAGES} selected={editUser.stages} onChange={v=>setEditUser(p=>({...p,stages:v}))}/>
    )}
@@ -5490,7 +5707,7 @@ function MyPlanAndEval({ user, idps, evals, impactData, readings, locks, setLock
   <div>
    <div style={{display:"flex",gap:6,marginBottom:16}}>
    {[{k:"plan",l:"🎯 خطتي المهنية",c:"#8B5CF6"},{k:"eval",l:"📊 تقييم أدائي",c:"#F59E0B"}].map(t=>(
-   <button key={t.k} onClick={()=>setSubTab(t.k)} style={{flex:1,padding:"11px",borderRadius:12,border:"none",background:subTab===t.k?`linear-gradient(135deg,${t.c},${t.c}cc)`:"#fff",color:subTab===t.k?"#fff":"#5B7A9E",fontSize:13,fontWeight:800,cursor:"pointer",boxShadow:subTab===t.k?`0 6px 18px ${t.c}40`:"0 2px 8px rgba(46,127,184,0.07)"}}>{t.l}</button>
+   <button key={t.k} onClick={()=>setSubTab(t.k)} style={{flex:1,padding:"11px",borderRadius:12,border:"none",background:subTab===t.k?`linear-gradient(135deg,${t.c},${t.c}cc)`:"#fff",color:subTab===t.k?"#fff":"#5B7A9E",fontSize:13,fontWeight:800,cursor:"pointer",boxShadow:subTab===t.k?`0 6px 18px ${t.c}40`:"0 2px 8px rgba(46,127,184,0.07)"}}>{tr(t.l)}</button>
    ))}
    </div>
 
@@ -5686,7 +5903,7 @@ function StageManagerPanel({ user, onLogout }) {
   <div style={{display:"flex",gap:6}}>
    <PrintButton title={`تقرير المرحلة - ${user.name}`} branch={user.branch}/>
    <ChangePasswordButton userId={user.id} currentPassword={user.password}/>
-   <RefreshButton onRefresh={loadData}/><button onClick={onLogout} style={{padding:"5px 12px",borderRadius:20,border:"1px solid #EF444430",background:"#EF444410",color:"#EF4444",fontSize:11,cursor:"pointer",marginRight:6}}>خروج</button>
+   <LangToggle/><RefreshButton onRefresh={loadData}/><button onClick={onLogout} style={{padding:"5px 12px",borderRadius:20,border:"1px solid #EF444430",background:"#EF444410",color:"#EF4444",fontSize:11,cursor:"pointer",marginRight:6}}>{t("خروج")}</button>
   </div>
   </div>
    </header>
@@ -6022,19 +6239,23 @@ function EvaluatorPanel({ user, partyKey, onLogout }) {
   };
 
   const assignPeer = async (empId, peerIds) => {
+  const prev = users;
   const nu = (users||[]).map(u=>u.id===empId?{...u,peerIds,peerId:undefined}:u);
   setUsersState(nu);
   try {
    if (typeof window.andlusAPI?.setPeers === "function") {
-    await window.andlusAPI.setPeers(empId, peerIds);
+    await window.andlusAPI.setPeers(empId, peerIds);   // يرمي استثناءً إن رفض الخادم (403)
     // نعيد تحميل المستخدمين من الخادم لضمان اتّساق peerIds عبر كل الحسابات
-    if (typeof window.andlusAPI?.get === "function") {
-     const fresh = await st.get("users_360c");
-     if (Array.isArray(fresh)) setUsersState(fresh);
-    }
+    const fresh = await st.get("users_360c");
+    if (Array.isArray(fresh)) setUsersState(fresh);
+    showToast("✓ حُفظ تعيين الزملاء");
    }
    else { await st.set("users_360c",nu); }
-  } catch(e){ showToast("تعذّر حفظ الزملاء","#EF4444"); }
+  } catch(e){
+   setUsersState(prev);   // نُعيد الحالة السابقة — التعيين لم يُحفظ فعلاً
+   showToast("تعذّر حفظ الزملاء: "+(e?.message||"صلاحية غير كافية"),"#EF4444");
+   return;
+  }
   setPeerAssign(pa=>pa&&pa.id===empId?{...pa,peerIds}:pa);
   };
 
@@ -6093,7 +6314,7 @@ function EvaluatorPanel({ user, partyKey, onLogout }) {
   </div>
   <div style={{display:"flex",gap:6}}>
    <ChangePasswordButton userId={user.id} currentPassword={user.password}/>
-   <RefreshButton onRefresh={loadData}/><button onClick={onLogout} style={{padding:"5px 12px",borderRadius:20,border:"1px solid #EF444430",background:"#EF444410",color:"#EF4444",fontSize:11,cursor:"pointer",marginRight:6}}>خروج</button>
+   <LangToggle/><RefreshButton onRefresh={loadData}/><button onClick={onLogout} style={{padding:"5px 12px",borderRadius:20,border:"1px solid #EF444430",background:"#EF444410",color:"#EF4444",fontSize:11,cursor:"pointer",marginRight:6}}>{t("خروج")}</button>
   </div>
   </div>
    </header>
@@ -6538,6 +6759,39 @@ function EmployeeGrowthPlan({ user, empEval, idpData, onSave, viewerRole, impact
    )}
   </div>
 
+  {/* لوحة متابعة تنفيذ مصغّرة للموظف — تظهر بعد اعتماد الخطة */}
+  {approved&&idpPlan.length>0&&(()=>{
+   const measured = idpPlan.filter(r=>{ const im=(impactData||{})[`${user.id}__${r.id}`]; return im&&(im.before!=null||im.after!=null||im.note); }).length;
+   const measPct = idpPlan.length?Math.round(measured/idpPlan.length*100):0;
+   const Ring=({pct,color,label,sub})=>{
+    const r=26,circ=2*Math.PI*r,dash=(Math.max(0,Math.min(100,pct))/100)*circ;
+    return (<div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6,flex:1,minWidth:100}}>
+    <svg width={70} height={70} style={{transform:"rotate(-90deg)"}}>
+    <circle cx={35} cy={35} r={r} fill="none" stroke="#EEF4FB" strokeWidth={7}/>
+    <circle cx={35} cy={35} r={r} fill="none" stroke={color} strokeWidth={7} strokeLinecap="round" strokeDasharray={`${dash} ${circ-dash}`}/>
+    <text x={35} y={35} transform="rotate(90 35 35)" textAnchor="middle" dominantBaseline="central" style={{fontSize:15,fontWeight:900,fill:color,fontFamily:MONO}}>{Math.round(pct)}%</text>
+    </svg>
+    <div style={{fontSize:11,fontWeight:800,color:"#15385C",textAlign:"center"}}>{label}</div>
+    {sub&&<div style={{fontSize:9,color:"#8CA3BD",textAlign:"center"}}>{sub}</div>}
+    </div>);
+   };
+   return (
+   <div style={{background:"linear-gradient(160deg,#FFFFFF,#F0F9FF)",border:"1px solid #2E7FB825",borderRadius:16,padding:"16px 18px",marginBottom:18}}>
+   <div style={{fontSize:13,fontWeight:900,color:"#15385C",marginBottom:14,display:"flex",alignItems:"center",gap:8}}>📊 لوحة متابعة تنفيذ خطتي</div>
+   <div style={{display:"flex",gap:12,flexWrap:"wrap",justifyContent:"space-around"}}>
+   <Ring pct={totals.pct} color="#10B981" label="نسبة التنفيذ" sub={`${totals.done} مكتمل • ${totals.inProgress} جارٍ`}/>
+   <Ring pct={measPct} color="#8B5CF6" label="قياس الأثر" sub={`${measured} من ${idpPlan.length} بند`}/>
+   <Ring pct={idpPlan.length?Math.round(totals.done/idpPlan.length*100):0} color="#F59E0B" label="البنود المكتملة" sub={`${totals.done} من ${idpPlan.length}`}/>
+   </div>
+   <div style={{marginTop:14,display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center"}}>
+   {idpPlan.map((r,i)=>{ const c=r.status==="تم التنفيذ"?"#10B981":r.status==="جاري التنفيذ"?"#F59E0B":"#CBD5E1"; return (
+   <div key={r.id} title={`${r.programName||("بند "+(i+1))}: ${r.status||"لم يبدأ"}`} style={{width:26,height:26,borderRadius:7,background:`${c}22`,border:`1.5px solid ${c}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:c}}>{i+1}</div>
+   ); })}
+   </div>
+   </div>
+   );
+  })()}
+
   {["أساسية","عامة","فنية"].map(cat=>{
    const catColor = CAT_COLORS[cat];
    const catRows = idpPlan.filter(r=>(r.cat||"أساسية")===cat);
@@ -6592,6 +6846,13 @@ function EmployeeGrowthPlan({ user, empEval, idpData, onSave, viewerRole, impact
   {row.mode==="auto"?(
    /* ═══ الخيار الأول: تلقائي من المكتبة ═══ */
    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+   <div style={{gridColumn:"1 / -1"}}>
+   <label style={lS}>📌 مصدر الاحتياج</label>
+   <select disabled={!canEditFields} value={F("needSource")} onChange={e=>setF("needSource",e.target.value)} style={{...iS,color:F("needSource")?"#15385C":"#5B7A9E"}}>
+   <option value="">— اختر —</option>
+   {IDP_NEED_SOURCES.map(o=><option key={o} value={o}>{o}</option>)}
+   </select>
+   </div>
    <div>
    <label style={lS}>🎯 الجدارة ({cat})</label>
    <select disabled={!canEditFields} value={F("comp")} onChange={e=>{setF("comp",e.target.value);setF("programName","");}} style={{...iS,color:F("comp")?"#15385C":"#5B7A9E"}}>
@@ -6728,7 +6989,7 @@ function EmployeeGrowthPlan({ user, empEval, idpData, onSave, viewerRole, impact
    {has?(
    <div style={{display:"flex",flexWrap:"wrap",gap:10,fontSize:11,color:"#15385C"}}>
    {cd.actualDate&&<span>📅 {cd.actualDate}</span>}
-   {cd.location&&<span>📍 {cd.location}</span>}
+   {cd.location&&(/^https?:\/\//i.test(String(cd.location).trim())?<a href={cd.location} target="_blank" rel="noopener noreferrer" style={{color:"#3B82F6",textDecoration:"none",fontWeight:700}}>🔗 رابط الاجتماع</a>:<span>📍 {cd.location}</span>)}
    {cd.trainer&&<span>👨‍🏫 {cd.trainer}</span>}
    {cd.status&&<span style={{fontWeight:700,color:"#7C3AED"}}>• {cd.status}</span>}
    {cd.attendPct!=null&&cd.attendPct!==""&&<span>📊 الحضور {cd.attendPct}%</span>}
@@ -6939,14 +7200,14 @@ function ExecPanel({ user, onLogout }) {
    </div>
    <div style={{display:"flex",gap:6}}>
    <ChangePasswordButton userId={user.id} currentPassword={user.password}/>
-   <RefreshButton onRefresh={loadData}/><button onClick={onLogout} style={{padding:"5px 12px",borderRadius:20,border:"1px solid #EF444430",background:"#EF444410",color:"#EF4444",fontSize:11,cursor:"pointer",marginRight:6}}>خروج</button>
+   <LangToggle/><RefreshButton onRefresh={loadData}/><button onClick={onLogout} style={{padding:"5px 12px",borderRadius:20,border:"1px solid #EF444430",background:"#EF444410",color:"#EF4444",fontSize:11,cursor:"pointer",marginRight:6}}>{t("خروج")}</button>
    </div>
    </div>
    </header>
    <main style={{maxWidth:1100,margin:"0 auto",padding:"20px 16px"}}>
    <div style={{display:"flex",gap:6,marginBottom:18,flexWrap:"wrap"}}>
    {[{k:"perf",l:"📊 متابعة تقييم الأداء",c:"#2E7FB8"},{k:"growth",l:"🎯 متابعة التطور المهني",c:"#10B981"},{k:"mine",l:"👤 خطتي وتقييمي",c:"#8B5CF6"}].map(t=>(
-   <button key={t.k} onClick={()=>setTab(t.k)} style={{flex:"1 1 auto",minWidth:150,padding:"13px 18px",borderRadius:24,border:"none",background:tab===t.k?`linear-gradient(135deg,${t.c},${t.c}cc)`:"#fff",color:tab===t.k?"#fff":"#5B7A9E",fontSize:13,fontWeight:800,cursor:"pointer",boxShadow:tab===t.k?`0 8px 22px ${t.c}45`:"0 2px 10px rgba(46,127,184,0.08)"}}>{t.l}</button>
+   <button key={t.k} onClick={()=>setTab(t.k)} style={{flex:"1 1 auto",minWidth:150,padding:"13px 18px",borderRadius:24,border:"none",background:tab===t.k?`linear-gradient(135deg,${t.c},${t.c}cc)`:"#fff",color:tab===t.k?"#fff":"#5B7A9E",fontSize:13,fontWeight:800,cursor:"pointer",boxShadow:tab===t.k?`0 8px 22px ${t.c}45`:"0 2px 10px rgba(46,127,184,0.08)"}}>{tr(t.l)}</button>
    ))}
    </div>
 
@@ -7020,7 +7281,7 @@ function DeptManagerTeam({ user, users, evals, idps, readings, impactData, locks
   <div>
    <div style={{display:"flex",gap:6,marginBottom:16}}>
    {[{k:"growth",l:"👥 تطوّر فريقي",c:"#10B981"},{k:"eval",l:"📋 تقييم فريقي",c:"#3B82F6"}].map(t=>(
-   <button key={t.k} onClick={()=>setSub(t.k)} style={{flex:1,padding:"11px",borderRadius:12,border:"none",background:sub===t.k?`linear-gradient(135deg,${t.c},${t.c}cc)`:"#fff",color:sub===t.k?"#fff":"#5B7A9E",fontSize:13,fontWeight:800,cursor:"pointer",boxShadow:sub===t.k?`0 6px 18px ${t.c}40`:"0 2px 8px rgba(46,127,184,0.07)"}}>{t.l}</button>
+   <button key={t.k} onClick={()=>setSub(t.k)} style={{flex:1,padding:"11px",borderRadius:12,border:"none",background:sub===t.k?`linear-gradient(135deg,${t.c},${t.c}cc)`:"#fff",color:sub===t.k?"#fff":"#5B7A9E",fontSize:13,fontWeight:800,cursor:"pointer",boxShadow:sub===t.k?`0 6px 18px ${t.c}40`:"0 2px 8px rgba(46,127,184,0.07)"}}>{tr(t.l)}</button>
    ))}
    </div>
 
@@ -7089,19 +7350,66 @@ function EduSupervisorTeam({ user, team, users, evals, idps, readings, impactDat
   const [evalWinAll,setEvalWinAll] = useState({branches:{}});
   const statusColor = { "تم التنفيذ":"#10B981", "جاري التنفيذ":"#F59E0B", "لم يتم التنفيذ":"#EF4444" };
   useEffect(()=>{ st.get("evalwindow_360c").then(w=>setEvalWinAll(w||{branches:{}})); },[]);
+  // كل معلمي الفرع التابعين للمشرفين المختصين (عبر supervisorId) — نطاق المشرف التعليمي
+  const teamIds = new Set(team.map(s=>s.id));
+  const branchTeachers = (users||[]).filter(u=>u.role==="employee" && teamIds.has(u.supervisorId));
+  // معلمو كل مشرف مختص
+  const teachersOf = (supId)=> (users||[]).filter(u=>u.role==="employee" && u.supervisorId===supId);
   return (
   <div>
    <div style={{display:"flex",gap:6,marginBottom:16}}>
    {[{k:"growth",l:"🎯 متابعة التطور المهني",c:"#10B981"},{k:"eval",l:"📊 متابعة تقييم الأداء",c:"#3B82F6"}].map(t=>(
-   <button key={t.k} onClick={()=>setSub(t.k)} style={{flex:1,padding:"11px",borderRadius:12,border:"none",background:sub===t.k?`linear-gradient(135deg,${t.c},${t.c}cc)`:"#fff",color:sub===t.k?"#fff":"#5B7A9E",fontSize:13,fontWeight:800,cursor:"pointer",boxShadow:sub===t.k?`0 6px 18px ${t.c}40`:"0 2px 8px rgba(46,127,184,0.07)"}}>{t.l}</button>
+   <button key={t.k} onClick={()=>setSub(t.k)} style={{flex:1,padding:"11px",borderRadius:12,border:"none",background:sub===t.k?`linear-gradient(135deg,${t.c},${t.c}cc)`:"#fff",color:sub===t.k?"#fff":"#5B7A9E",fontSize:13,fontWeight:800,cursor:"pointer",boxShadow:sub===t.k?`0 6px 18px ${t.c}40`:"0 2px 8px rgba(46,127,184,0.07)"}}>{tr(t.l)}</button>
    ))}
    </div>
    <div style={{background:"#0891B20D",border:"1px solid #0891B230",borderRadius:12,padding:"12px 16px",marginBottom:14,fontSize:12,color:"#5B7A9E",lineHeight:1.7}}>
-   👁️ متابعة المشرفين المختصين في فرعك ({team.length}) — بصفتك متابعهم الفني.
+   👁️ بصفتك المشرف التعليمي للفرع، تتابع {team.length} مشرفاً مختصاً و{branchTeachers.length} معلماً في فرعك عبرهم.
    </div>
+
+   {/* لوحة معلومات شاملة لكل معلمي الفرع */}
+   {branchTeachers.length>0&&(
+   <div style={{marginBottom:18}}>
+   <AnalyticsDashboard scope={branchTeachers} evals={evals} idps={idps} impactData={impactData} unitLabel="مرحلة" getUnit={(u)=>u.stage||"—"} fixedMode={sub==="eval"?"eval":"growth"}/>
+   </div>
+   )}
+
    {team.length===0&&(
    <div style={{textAlign:"center",padding:36,color:"#5B7A9E",background:"#fff",borderRadius:12}}>لا يوجد مشرفون مختصون في فرعك بعد.</div>
    )}
+
+   {/* لكل مشرف مختص: معلموه وخططهم/تقييماتهم */}
+   {team.length>0&&team.map(sup=>{
+   const teachers = teachersOf(sup.id);
+   return (
+   <details key={"sup_"+sup.id} open style={{background:"#fff",border:"1px solid #0891B225",borderRadius:14,marginBottom:10,overflow:"hidden"}}>
+   <summary style={{padding:"12px 14px",cursor:"pointer",listStyle:"none",display:"flex",alignItems:"center",gap:10,background:"#0891B208"}}>
+   <div style={{width:34,height:34,borderRadius:9,background:"#0891B215",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15}}>🧑‍🏫</div>
+   <div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:13,color:"#15385C"}}>{sup.name}</div><div style={{fontSize:10,color:"#8CA3BD"}}>مشرف مختص{sup.stage?` • ${sup.stage}`:""} • {teachers.length} معلم</div></div>
+   </summary>
+   <div style={{padding:"10px 14px"}}>
+   {teachers.length===0?<div style={{textAlign:"center",padding:12,color:"#8CA3BD",fontSize:12}}>لا معلمون مرتبطون بهذا المشرف بعد.</div>
+   :teachers.map(t=>{
+    const plan=idps[t.id]||{}; const rows=plan.plan||[]; const ap=plan.approved;
+    const est=getEmpFullStats(t,evals[t.id]||{});
+    return (
+    <div key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 10px",borderBottom:"1px solid #F4F9FE",flexWrap:"wrap"}}>
+    <div style={{flex:1,minWidth:120}}><div style={{fontSize:12,fontWeight:700,color:"#15385C"}}>{t.name}</div><div style={{fontSize:10,color:"#8CA3BD"}}>{t.stage||""} {sub==="growth"?`• ${rows.length} بند`:est?.avg!=null?`• متوسّط ${est.avg.toFixed(2)}`:"• لم يُقيّم"}</div></div>
+    {sub==="growth"
+     ? <span style={{fontSize:10,color:ap?"#10B981":"#F59E0B",background:ap?"#10B98115":"#F59E0B15",padding:"3px 10px",borderRadius:20,fontWeight:700}}>{ap?"معتمدة":plan.isFinal?"بانتظار":"مسودّة"}</span>
+     : <span style={{fontSize:10,color:est?.avg!=null?getLevel(est.avg).color:"#94A3B8",background:"#F4F9FE",padding:"3px 10px",borderRadius:20,fontWeight:700}}>{est?.avg!=null?getLevel(est.avg).label:"—"}</span>}
+    <button onClick={()=>onOpenCard&&onOpenCard(t)} style={{padding:"5px 12px",borderRadius:8,border:"1px solid #0891B240",background:"#0891B210",color:"#0891B2",fontSize:11,cursor:"pointer",fontWeight:700}}>{sub==="growth"?"👁️ الخطة":"👁️ التقييم"}</button>
+    </div>
+    );
+   })}
+   </div>
+   </details>
+   );
+   })}
+
+   {/* القسم الأصلي: خطط/تقييمات المشرفين المختصين أنفسهم */}
+   <details style={{marginTop:8,background:"#fff",border:"1px solid #E3EEF9",borderRadius:14,overflow:"hidden"}}>
+   <summary style={{padding:"12px 14px",cursor:"pointer",fontSize:12,fontWeight:800,color:"#0891B2",listStyle:"none"}}>📋 خطط وتقييمات المشرفين المختصين أنفسهم (اضغط للعرض)</summary>
+   <div style={{padding:"10px 14px"}}>
 
    {sub==="growth"&&team.length>0&&team.map(u=>{
    const plan=idps[u.id]||{}; const rows=plan.plan||[]; const ap=plan.approved;
@@ -7149,6 +7457,8 @@ function EduSupervisorTeam({ user, team, users, evals, idps, readings, impactDat
    </div>
    );
    })}
+   </div>
+   </details>
 
    {evalTarget&&<EvalForm partyKey={evalTarget.party} targetUser={evalTarget.user} existingScores={(evals[evalTarget.user.id]||{})[evalTarget.party]||{}} onSave={async s=>{await onSaveEval(evalTarget.user.id,evalTarget.party,s);setEvalTarget(null);}} onCancel={()=>setEvalTarget(null)} locks={locks} onLock={async(key)=>{const nl={...(locks||{}),[key]:{lockedAt:new Date().toISOString()}};setLocks(nl);await st.set('locks_360c',nl);}}/>}
   </div>
@@ -7307,7 +7617,7 @@ function EmployeePanel({ user, onLogout }) {
   </div>
   <div style={{display:"flex",gap:6,alignItems:"center"}}>
    <ChangePasswordButton userId={user.id} currentPassword={user.password} compact/>
-   <RefreshButton onRefresh={loadData}/><button onClick={onLogout} style={{padding:"4px 12px",borderRadius:20,border:"1px solid #EF444430",background:"#EF444410",color:"#EF4444",fontSize:11,cursor:"pointer",marginRight:6}}>خروج</button>
+   <LangToggle/><RefreshButton onRefresh={loadData}/><button onClick={onLogout} style={{padding:"4px 12px",borderRadius:20,border:"1px solid #EF444430",background:"#EF444410",color:"#EF4444",fontSize:11,cursor:"pointer",marginRight:6}}>{t("خروج")}</button>
   </div>
   </div>
    </header>
@@ -7551,10 +7861,20 @@ function AppInner() {
   const [user,setUser] = useState(null);
   const logout = () => setUser(null);
   const [ready, setReady] = useState(false);
-  useEffect(()=>{ initSharedData().then(()=>setReady(true)).catch(e=>{ console.error(e); setReady(true); }); },[]);
-  if (!ready) return <div style={{minHeight:"100vh",background:APP_BG,display:"flex",alignItems:"center",justifyContent:"center",color:"#5B7A9E",direction:"rtl",fontSize:13}}>جاري التحميل...</div>;
+  const lang = useAppLang();   // يُعيد تصيير كل التطبيق عند تبديل اللغة
+  useEffect(()=>{
+    // نستعيد اللغة المحفوظة محلّياً
+    try { const saved = window.localStorage && window.localStorage.getItem("andlus_lang"); if(saved) window.__I18N.lang = saved; } catch {}
+    // نحمّل قاموس الترجمة المشترك (يديره مدير النظام)
+    st.getShared("i18n_360c").then(d=>{ if(d && typeof d==="object") window.__I18N.dict = d; }).catch(()=>{});
+    initSharedData().then(()=>setReady(true)).catch(e=>{ console.error(e); setReady(true); });
+  },[]);
+  // اتّجاه الصفحة يتبع اللغة
+  useEffect(()=>{ try { document.documentElement.dir = lang==="en"?"ltr":"rtl"; document.documentElement.lang = lang; } catch {} },[lang]);
+  if (!ready) return <div style={{minHeight:"100vh",background:APP_BG,display:"flex",alignItems:"center",justifyContent:"center",color:"#5B7A9E",direction:"rtl",fontSize:13}}>{t("جاري التحميل...")||"جاري التحميل..."}</div>;
   if (!user) return <LoginScreen onLogin={setUser}/>;
   if (user.role==="admin") return <AdminPanel onLogout={logout}/>;
+  if (user.role==="admin_assistant") return <AdminPanel onLogout={logout} assistant={user}/>;
   if (user.role==="supervisor") return <EvaluatorPanel user={user} partyKey="supervisor" onLogout={logout}/>;
   if (user.role==="branch_mgr") return <BranchManagerPanel user={user} onLogout={logout}/>;
   if (user.role==="stage_mgr") return <StageManagerPanel user={user} onLogout={logout}/>;

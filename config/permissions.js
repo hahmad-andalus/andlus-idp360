@@ -216,6 +216,10 @@ function canManagePeers(actor, target) {
   if (!actor || !target) return false;
   if (isAdmin(actor)) return true;
   if (isDirectSupervisor(actor, target) || isDirectManager(actor, target)) return true;
+  // المتابع الفني/المشرف المختص: يعيّن زملاء لموظفي مرحلته في فرعه (حتى إن لم يُضبط supervisorId)
+  if ((actor.role === 'supervisor' || actor.role === 'branch_ext') && actor.branch === target.branch && (!actor.stage || actor.stage === target.stage)) return true;
+  // مدير المرحلة: لموظفي مرحلته
+  if (actor.role === 'stage_mgr' && actor.branch === target.branch && actor.stage === target.stage) return true;
   if (actor.role === 'branch_mgr' && branchesOf(actor).includes(target.branch)) return true;
   return false;
 }

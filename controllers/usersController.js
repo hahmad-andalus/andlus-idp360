@@ -43,6 +43,15 @@ async function create(req, res) {
   if (!b.username || !b.password || !b.name || !b.role) {
     return res.status(400).json({ error: 'الحقول الأساسية مطلوبة (اسم المستخدم، كلمة المرور، الاسم، الدور)' });
   }
+  // تحقّق دفاعي: الدور يجب أن يكون ضمن الأدوار المعروفة (يمنع انهيار قاعدة البيانات على قيمة غير متوقّعة)
+  const VALID_ROLES = ['admin','admin_assistant','exec','branch_mgr','stage_mgr','deputy','supervisor','dept_mgr','specialist','branch_ext','employee'];
+  if (!VALID_ROLES.includes(b.role)) {
+    return res.status(400).json({ error: `الدور «${b.role}» غير معروف. الأدوار المسموحة: ${VALID_ROLES.join('، ')}` });
+  }
+  // مساعد مدير النظام لا يُنشئ حسابات إدارية
+  if (req.user.role === 'admin_assistant' && (b.role === 'admin' || b.role === 'admin_assistant')) {
+    return res.status(403).json({ error: 'لا تملك صلاحية إنشاء حساب إداري' });
+  }
   const exists = db.prepare('SELECT 1 FROM users WHERE username = ?').get(b.username);
   if (exists) return res.status(409).json({ error: 'اسم المستخدم مستخدم مسبقاً' });
 
@@ -75,6 +84,22 @@ async function update(req, res) {
   const u = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
   if (!u) return res.status(404).json({ error: 'المستخدم غير موجود' });
   const b = req.body || {};
+  // تحقّق دفاعي: إن أُرسل دور، يجب أن يكون معروفاً
+  if (b.role) {
+    const VALID_ROLES = ['admin','admin_assistant','exec','branch_mgr','stage_mgr','deputy','supervisor','dept_mgr','specialist','branch_ext','employee'];
+    if (!VALID_ROLES.includes(b.role)) {
+      return res.status(400).json({ error: `الدور «${b.role}» غير معروف. الأدوار المسموحة: ${VALID_ROLES.join('، ')}` });
+    }
+  }
+  // مساعد مدير النظام لا يعدّل حسابات المدراء ولا يرقّي أحداً إلى دور إداري
+  if (req.user.role === 'admin_assistant') {
+    if (u.role === 'admin' || u.role === 'admin_assistant') {
+      return res.status(403).json({ error: 'لا تملك صلاحية على حسابات مدير النظام' });
+    }
+    if (b.role === 'admin' || b.role === 'admin_assistant') {
+      return res.status(403).json({ error: 'لا تملك صلاحية منح دور إداري' });
+    }
+  }
 
   // كلمة المرور تُحدَّث فقط إن أُرسلت (وإلا تبقى كما هي)
   let hash = u.password_hash;
@@ -129,8 +154,12 @@ function assignPeers(req, res) {
 // DELETE /api/users/:id
 function remove(req, res) {
   const id = req.params.id;
-  const u = db.prepare('SELECT 1 FROM users WHERE id = ?').get(id);
+  const u = db.prepare('SELECT role FROM users WHERE id = ?').get(id);
   if (!u) return res.status(404).json({ error: 'المستخدم غير موجود' });
+  // مساعد مدير النظام لا يمسّ حسابات المدراء (إنشاءً أو تعديلاً أو حذفاً)
+  if (req.user.role === 'admin_assistant' && (u.role === 'admin' || u.role === 'admin_assistant')) {
+    return res.status(403).json({ error: 'لا تملك صلاحية على حسابات مدير النظام' });
+  }
 
   const tx = db.transaction(() => {
     db.prepare('DELETE FROM users WHERE id = ?').run(id);  // CASCADE يحذف المرتبطات

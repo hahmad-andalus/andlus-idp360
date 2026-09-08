@@ -38,9 +38,9 @@ function migrate() {
 
   // 2) إعادة بناء users إذا كانت CHECK القديمة لا تقبل الأدوار الجديدة
   const userSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get()?.sql || '';
-  if (!userSql.includes('branch_ext')) {
+  if (!userSql.includes('branch_ext') || !userSql.includes('admin_assistant')) {
     rebuildUsers();
-    console.log('✓ أُعيد بناء جدول users بالقيود الجديدة');
+    console.log('✓ أُعيد بناء جدول users بالقيود الجديدة (يشمل admin_assistant)');
   }
 
   // 3) إعادة بناء eval_scores إذا كانت party CHECK لا تقبل الأطراف الجديدة
@@ -99,7 +99,7 @@ function rebuildUsers() {
           password_hash   TEXT NOT NULL,
           name            TEXT NOT NULL,
           national_id     TEXT,
-          role            TEXT NOT NULL CHECK(role IN ('admin','exec','branch_mgr','stage_mgr','deputy','supervisor','dept_mgr','specialist','branch_ext','employee')),
+          role            TEXT NOT NULL CHECK(role IN ('admin','admin_assistant','exec','branch_mgr','stage_mgr','deputy','supervisor','dept_mgr','specialist','branch_ext','employee')),
           role_subtype    TEXT,
           job             TEXT,
           branch          TEXT,

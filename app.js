@@ -114,7 +114,18 @@ app.get('*', (req, res) => {
 app.use((err, req, res, next) => {
   console.error(err);
   const msg = cfg.NODE_ENV === 'production' ? 'حدث خطأ في الخادم' : err.message;
+  if (res.headersSent) return next(err);
   res.status(err.status || 500).json({ error: msg });
+});
+
+// ═══ شبكة أمان على مستوى العملية ═══
+// تمنع انهيار الخادم كاملاً عند أي خطأ غير متوقّع (مثل قيد قاعدة بيانات).
+// يُسجَّل الخطأ ويستمرّ الخادم في العمل بدل أن يتوقّف والموقع ينهار.
+process.on('uncaughtException', (err) => {
+  console.error('⚠️  خطأ غير متوقّع (لم يُسقط الخادم):', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('⚠️  وعد مرفوض غير معالَج (لم يُسقط الخادم):', reason);
 });
 
 // لا نستقبل الطلبات إلا بعد اكتمال بذر حساب المدير

@@ -99,6 +99,7 @@ function rebuildUsers() {
           password_hash   TEXT NOT NULL,
           name            TEXT NOT NULL,
           national_id     TEXT,
+          job_number      TEXT,
           role            TEXT NOT NULL CHECK(role IN ('admin','admin_assistant','exec','branch_mgr','stage_mgr','deputy','supervisor','dept_mgr','specialist','branch_ext','employee')),
           role_subtype    TEXT,
           job             TEXT,
@@ -110,8 +111,8 @@ function rebuildUsers() {
           created_at      TEXT DEFAULT (datetime('now')),
           updated_at      TEXT DEFAULT (datetime('now'))
         );
-        INSERT INTO users_new (id, username, password_hash, name, national_id, role, role_subtype, job, branch, stage, supervisor_type, supervisor_id, stage_manager_id, created_at, updated_at)
-          SELECT id, username, password_hash, name, national_id, role, role_subtype, job, branch, stage, supervisor_type, supervisor_id, stage_manager_id, created_at, updated_at FROM users;
+        INSERT INTO users_new (id, username, password_hash, name, national_id, job_number, role, role_subtype, job, branch, stage, supervisor_type, supervisor_id, stage_manager_id, created_at, updated_at)
+          SELECT id, username, password_hash, name, national_id, job_number, role, role_subtype, job, branch, stage, supervisor_type, supervisor_id, stage_manager_id, created_at, updated_at FROM users;
         DROP TABLE users;
         ALTER TABLE users_new RENAME TO users;
         CREATE INDEX IF NOT EXISTS idx_users_role   ON users(role);

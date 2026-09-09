@@ -238,7 +238,7 @@ function canWriteEditRequest(actor, target) {
 // رقم الهوية بيانات شخصية — لا يراه إلا من له نطاق إداري على الموظف
 function canSeeNationalId(actor, target) {
   if (!actor || !target) return false;
-  if (isAdmin(actor) || actor.id === target.id) return true;
+  if (isAdmin(actor) || actor.role === 'admin_assistant' || actor.id === target.id) return true;
   if (['branch_mgr', 'stage_mgr', 'exec', 'dept_mgr'].includes(actor.role)) return canReadEmployee(actor, target);
   return false;
 }

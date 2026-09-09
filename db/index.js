@@ -89,9 +89,12 @@ function migrate() {
 }
 
 function rebuildUsers() {
-  const tx = db.transaction(() => {
-    db.pragma('foreign_keys = OFF');
-    try {
+  // حرج: PRAGMA foreign_keys لا يتغيّر داخل معاملة (يُتجاهل بصمت). لذا نضبطه خارجها.
+  // وإلا يبقى مفعّلاً، فـDROP TABLE users يُطلق ON DELETE CASCADE ويحذف الخطط والتقييمات المرتبطة!
+  const fkWas = db.pragma('foreign_keys', { simple: true });
+  db.pragma('foreign_keys = OFF');
+  try {
+    const tx = db.transaction(() => {
       db.exec(`
         CREATE TABLE users_new (
           id              TEXT PRIMARY KEY,
@@ -121,17 +124,18 @@ function rebuildUsers() {
         CREATE INDEX IF NOT EXISTS idx_users_super  ON users(supervisor_id);
         CREATE INDEX IF NOT EXISTS idx_users_stmgr  ON users(stage_manager_id);
       `);
-    } finally {
-      db.pragma('foreign_keys = ON');
-    }
-  });
-  tx();
+    });
+    tx();
+  } finally {
+    if (fkWas) db.pragma('foreign_keys = ON');   // نعيد الحالة الأصلية بعد المعاملة
+  }
 }
 
 function rebuildEvalScores() {
-  const tx = db.transaction(() => {
-    db.pragma('foreign_keys = OFF');
-    try {
+  const fkWas = db.pragma('foreign_keys', { simple: true });
+  db.pragma('foreign_keys = OFF');   // خارج المعاملة (وإلا يُتجاهل)
+  try {
+    const tx = db.transaction(() => {
       // نكتشف إن كان العمود round موجوداً في الجدول القديم لننقله أو نضع 1 افتراضياً
       const oldCols = db.prepare('PRAGMA table_info(eval_scores)').all().map(c => c.name);
       const hadRound = oldCols.includes('round');
@@ -155,11 +159,11 @@ function rebuildEvalScores() {
         CREATE INDEX IF NOT EXISTS idx_eval_emp   ON eval_scores(employee_id);
         CREATE INDEX IF NOT EXISTS idx_eval_party ON eval_scores(employee_id, party);
       `);
-    } finally {
-      db.pragma('foreign_keys = ON');
-    }
-  });
-  tx();
+    });
+    tx();
+  } finally {
+    if (fkWas) db.pragma('foreign_keys = ON');
+  }
 }
 
 // نبذر الإعدادات الافتراضية إن كانت القاعدة فارغة

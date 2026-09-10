@@ -58,6 +58,6 @@ router.post('/readings', data.setReading);
 
 // ─── الإعدادات المشتركة (التعديل للمدير) ───
 router.get('/settings', data.getSettings);
-router.post('/settings', requireRole('admin'), data.setSetting);
+router.post('/settings', requireRole('admin','admin_assistant'), data.setSetting);
 
 module.exports = router;

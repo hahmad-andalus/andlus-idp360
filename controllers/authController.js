@@ -24,7 +24,7 @@ async function login(req, res) {
   if (!username || !password) {
     return res.status(400).json({ error: 'اسم المستخدم وكلمة المرور مطلوبان' });
   }
-  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+  const user = db.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE').get(String(username).trim());  // بلا حساسية لحالة الأحرف
   // رسالة موحّدة سواء المستخدم غير موجود أو كلمة المرور خاطئة (عدم كشف وجود الحساب)
   if (!user) {
     return res.status(401).json({ error: 'بيانات الدخول غير صحيحة' });

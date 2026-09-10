@@ -52,7 +52,9 @@ async function create(req, res) {
   if (req.user.role === 'admin_assistant' && (b.role === 'admin' || b.role === 'admin_assistant')) {
     return res.status(403).json({ error: 'لا تملك صلاحية إنشاء حساب إداري' });
   }
-  const exists = db.prepare('SELECT 1 FROM users WHERE username = ?').get(b.username);
+  // نوحّد البريد (اسم المستخدم) بحروف صغيرة — معيار البريد الإلكتروني، ويمنع اختلاف حالة الأحرف
+  const uname = String(b.username).trim().toLowerCase();
+  const exists = db.prepare('SELECT 1 FROM users WHERE username = ? COLLATE NOCASE').get(uname);
   if (exists) return res.status(409).json({ error: 'اسم المستخدم مستخدم مسبقاً' });
 
   const id = b.id || crypto.randomUUID();
@@ -63,7 +65,7 @@ async function create(req, res) {
       (id, username, password_hash, name, national_id, job_number, role, role_subtype, job, branch, stage, supervisor_type, supervisor_id, stage_manager_id)
       VALUES (@id,@username,@password_hash,@name,@national_id,@job_number,@role,@role_subtype,@job,@branch,@stage,@supervisor_type,@supervisor_id,@stage_manager_id)`)
       .run({
-        id, username: b.username, password_hash: hash, name: b.name,
+        id, username: uname, password_hash: hash, name: b.name,
         national_id: b.nationalId || null, job_number: b.jobNumber || null, role: b.role, role_subtype: b.roleSubtype || null, job: b.job || null,
         branch: b.branch || null, stage: b.stage || null,
         supervisor_type: b.supervisorType || null,

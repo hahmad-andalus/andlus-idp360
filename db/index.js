@@ -86,6 +86,21 @@ function migrate() {
       console.log('✓ أُضيف عمود init_password إلى account_requests');
     }
   }
+
+  // 6) توحيد أسماء المستخدمين (البريد) بحروف صغيرة — يمنع اختلاف حالة الأحرف عند الدخول
+  try {
+    const upper = db.prepare("SELECT id, username FROM users WHERE username <> lower(username)").all();
+    if (upper.length) {
+      const upd = db.prepare('UPDATE users SET username = ? WHERE id = ?');
+      let done = 0;
+      for (const r of upper) {
+        const low = String(r.username).trim().toLowerCase();
+        const clash = db.prepare('SELECT 1 FROM users WHERE username = ? AND id <> ?').get(low, r.id);
+        if (!clash) { try { upd.run(low, r.id); done++; } catch (e) {} }
+      }
+      if (done) console.log(`✓ وُحّد ${done} اسم مستخدم بحروف صغيرة`);
+    }
+  } catch (e) { console.error('تعذّر توحيد أسماء المستخدمين:', e.message); }
 }
 
 function rebuildUsers() {

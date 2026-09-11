@@ -5053,6 +5053,12 @@ function TranslationsManager({ onSave, showToast }) {
     return { ...base, ...I18N_SEED, ...((window.__I18N&&window.__I18N.dict)||{}) };
    } catch { return {...I18N_SEED}; }
   });
+  // v65: نحمّل القاموس المحفوظ من الخادم أولاً، ونمنع الحفظ قبل اكتمال التحميل (يمنع الكتابة فوق قاموس نصف محمّل)
+  const [loaded,setLoaded] = useState(false);
+  useEffect(()=>{ let alive=true;
+    st.getShared("i18n_360c").then(d=>{ if(alive){ if(d && typeof d==="object" && Object.keys(d).length){ const base={}; (I18N_KEYS||[]).forEach(k=>{base[k]="";}); setDict({...base,...I18N_SEED,...d}); if(typeof window!=="undefined") window.__I18N.dict=d; } setLoaded(true); } }).catch(()=>setLoaded(true));
+    return ()=>{ alive=false; };
+  },[]);
   const [search,setSearch] = useState("");
   const [newAr,setNewAr] = useState("");
   const keys = Object.keys(dict).sort((a,b)=>a.localeCompare(b,"ar"));
@@ -5060,10 +5066,14 @@ function TranslationsManager({ onSave, showToast }) {
   const setVal = (ar,en)=>setDict(p=>({...p,[ar]:en}));
   const addRow = ()=>{ const a=newAr.trim(); if(a&&!dict[a]){ setDict(p=>({...p,[a]:""})); setNewAr(""); } };
   const save = async ()=>{
-    // نُبقي فقط ما له ترجمة إنجليزية غير فارغة (لتقليل الحجم)، لكن نحتفظ بالمفاتيح للمرجع
-    if (typeof window!=="undefined") window.__I18N.dict = dict;
-    await onSave(dict);
-    showToast && showToast("✓ حُفظت الترجمات — ستظهر عند تبديل اللغة");
+    // v65: لا نحفظ قبل اكتمال تحميل القاموس من الخادم (وإلا نمحو المحفوظ بقاموس ناقص)
+    if (!loaded) { showToast && showToast("⏳ جارٍ تحميل الترجمات المحفوظة... انتظر لحظة ثم احفظ","#F59E0B"); return; }
+    // نُبقي فقط ما له ترجمة إنجليزية غير فارغة (لتقليل الحجم)
+    const out = {};
+    Object.entries(dict).forEach(([k,v])=>{ if(v && String(v).trim()) out[k]=String(v).trim(); });
+    if (typeof window!=="undefined") window.__I18N.dict = out;
+    await onSave(out);
+    showToast && showToast(`✓ حُفظت ${Object.keys(out).length} ترجمة — ستظهر عند تبديل اللغة`);
   };
   const translated = keys.filter(k=>dict[k]&&dict[k].trim()).length;
 
@@ -5214,6 +5224,9 @@ function AdminPanel({ onLogout, assistant }) {
    };
    // نبني فهرس البريد→id لربط المتابع/المدير
    const emailToId = {}; (users||[]).forEach(u=>{ if(u.username) emailToId[norm(u.username).toLowerCase()]=u.id; });
+   // v65: مسمّيات الجدارات المسجّلة (للتحقّق الصارم) + قائمة القيادات المقبولة
+   const regJobs = {}; Object.keys(getActiveJobs()||{}).forEach(j=>{ regJobs[norm(j)]=j; });
+   const leaderJobs = {"متابع فني":1,"مشرف مختص":1,"وكيل":1,"مدير مرحلة":1,"مدير مباشر":1,"مدير فرع":1,"مدير عام فرع":1,"مشرف تعليمي":1};
    let ok=0, created=[], errors=[];
    const existing = new Set((users||[]).map(u=>u.username));
    for(let i=start;i<lines.length;i++){
@@ -5226,17 +5239,32 @@ function AdminPanel({ onLogout, assistant }) {
     if(existing.has(cleanU)){ errors.push(`سطر ${i+1} (${name}): البريد مستخدم`); continue; }
     const branch = branchNorm[norm(branchRaw)] || branchRaw;
     const stage = stageNorm[norm(stageRaw)] || stageRaw || "";
-    // الدور من المسمّى (افتراضياً معلم)
-    const jobKey = norm(jobRaw||"معلم");
-    const rr = roleMap[jobKey] || {role:"employee",roleSubtype:"teacher"};
+    // v65: المسمّى الوظيفي مطلوب ويجب أن يكون مسجّلاً في مصفوفة الجدارات (أو قيادة) — وإلا يُرفض السطر
+    const jobN = norm(jobRaw||"");
+    if(!jobN){ errors.push(`سطر ${i+1} (${name}): المسمّى الوظيفي مطلوب`); continue; }
+    const isReg = !!regJobs[jobN], isLeader = !!leaderJobs[jobN];
+    if(!isReg && !isLeader){ errors.push(`سطر ${i+1} (${name}): المسمّى «${jobN}» غير مسجّل في النظام — سجّله أولاً من مصفوفة الجدارات، أو صحّح الإملاء ليطابق مسمّى موجوداً`); continue; }
+    // الدور من المسمّى (مطابقة مرنة)
+    let rr = roleMap[jobN];
+    if(!rr){
+      if(/مشرف تعليمي/.test(jobN)) rr={role:"branch_ext",roleSubtype:"edu_excellence"};
+      else if(/متابع فني|مشرف مختص/.test(jobN)) rr={role:"supervisor",roleSubtype:"specialist"};
+      else if(/مدير عام فرع|مدير فرع/.test(jobN)) rr={role:"branch_mgr",roleSubtype:""};
+      else if(/مدير مرحلة|مدير مباشر/.test(jobN)) rr={role:"stage_mgr",roleSubtype:""};
+      else if(/وكيل/.test(jobN)) rr={role:"deputy",roleSubtype:"general"};
+      else if(/إداري|اداري/.test(jobN)) rr={role:"employee",roleSubtype:"admin_staff"};
+      else rr={role:"employee",roleSubtype:"teacher"};
+    }
     // ربط المتابع الفني والمدير المباشر بالبريد
     const supervisorId = supEmail ? (emailToId[norm(supEmail).toLowerCase()]||"") : "";
     const stageManagerId = mgrEmail ? (emailToId[norm(mgrEmail).toLowerCase()]||"") : "";
     if(supEmail && !supervisorId) errors.push(`سطر ${i+1} (${name}): لم يُعثر على المتابع الفني بالبريد ${supEmail}`);
     if(mgrEmail && !stageManagerId) errors.push(`سطر ${i+1} (${name}): لم يُعثر على المدير المباشر بالبريد ${mgrEmail}`);
+    // v65: نحفظ المسمّى الفعلي (regJobs يعيد الصيغة المسجّلة) لضمان ربطه بجداراته
+    const finalJob = regJobs[jobN] || jobRaw || "";
     const newU={ id:(Date.now().toString()+Math.floor(Math.random()*1000)), name, username:cleanU, password:password||"Andalus@123",
       role:rr.role, roleSubtype:rr.roleSubtype,
-      job:(rr.role==="employee"?(rr.roleSubtype==="admin_staff"?"إداري":"معلم"):(jobRaw||"")),
+      job:finalJob,
       branch, stage, jobNumber:jobNumber||"", nationalId:nationalId||"",
       supervisorId, stageManagerId, peerIds:[] };
     try{

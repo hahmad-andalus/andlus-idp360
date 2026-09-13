@@ -7257,8 +7257,8 @@ function EmployeeGrowthPlan({ user, empEval, idpData, onSave, viewerRole, impact
    <div style={{display:"flex",alignItems:"center",gap:10}}>
   <span style={{fontSize:22}}>⏳</span>
   <div>
-  <div style={{fontSize:13,fontWeight:900,color:"#F59E0B"}}>{role==="supervisor"?(idpData?.isFinal?"بانتظار اعتمادك":"لم يُنهِ الموظف التخطيط بعد"):"غير معتمدة من المتابع الفني"}</div>
-  <div style={{fontSize:10,color:"#5B7A9E",marginTop:2}}>{role==="supervisor"?(idpData?.isFinal?"راجع بنود الخطة ثم اعتمدها":"الخطة في مرحلة الحفظ المؤقت — تُعتمد بعد أن يحفظها الموظف ويغلق التخطيط"):"يمكنك التعديل حتى يعتمدها المتابع الفني"}</div>
+  <div style={{fontSize:13,fontWeight:900,color:"#F59E0B"}}>{role==="supervisor"?(idpData?.isFinal?t("بانتظار اعتمادك"):t("لم يُنهِ الموظف التخطيط بعد")):t("غير معتمدة من المتابع الفني")}</div>
+  <div style={{fontSize:10,color:"#5B7A9E",marginTop:2}}>{role==="supervisor"?(idpData?.isFinal?t("راجع بنود الخطة ثم اعتمدها"):t("الخطة في مرحلة الحفظ المؤقت — تُعتمد بعد أن يحفظها الموظف ويغلق التخطيط")):t("يمكنك التعديل حتى يعتمدها المتابع الفني")}</div>
   </div>
    </div>
    {canApprove&&idpPlan.length>0&&idpData?.isFinal&&<button onClick={approvePlan} style={{padding:"7px 18px",borderRadius:20,border:"none",background:"linear-gradient(135deg,#059669,#10B981)",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>✅ اعتماد الخطة</button>}
@@ -7333,13 +7333,13 @@ function EmployeeGrowthPlan({ user, empEval, idpData, onSave, viewerRole, impact
   {/* رأس الفئة */}
   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:`${catColor}12`,border:`1px solid ${catColor}30`,borderRadius:12,padding:"10px 16px",marginBottom:10}}>
   <div style={{fontSize:14,fontWeight:900,color:catColor}}>
-  {cat==="أساسية"?"🔷":cat==="عامة"?"🔶":"⭐"} بنود تطويرية — الجدارات {cat==="أساسية"?"الأساسية":cat==="عامة"?"العامة/الإدارية/القيادية":"الفنية"}
+  {cat==="أساسية"?"🔷":cat==="عامة"?"🔶":"⭐"} {t(cat==="أساسية"?"بنود تطويرية — الجدارات الأساسية":cat==="عامة"?"بنود تطويرية — الجدارات العامة/الإدارية/القيادية":"بنود تطويرية — الجدارات الفنية")}
   </div>
   <span style={{fontSize:11,color:"#5B7A9E"}}>{catRows.length} بند</span>
   </div>
 
   {catRows.length===0&&(
-  <div style={{textAlign:"center",padding:16,color:"#5B7A9E",fontSize:11,marginBottom:8}}>لم يُضَف بند لهذه الفئة بعد (بند واحد كحد أقصى)</div>
+  <div style={{textAlign:"center",padding:16,color:"#5B7A9E",fontSize:11,marginBottom:8}}>{t("لم يُضَف بند لهذه الفئة بعد (بند واحد كحد أقصى)")}</div>
   )}
 
   {catRows.map((row)=>{
@@ -7545,7 +7545,7 @@ function EmployeeGrowthPlan({ user, empEval, idpData, onSave, viewerRole, impact
 
   {catRows.length===0&&canEditFields&&(
   <button onClick={()=>addRow(cat)} style={{width:"100%",padding:"10px",borderRadius:10,border:`1px dashed ${catColor}60`,background:`${catColor}0D`,color:catColor,fontWeight:700,fontSize:12,cursor:"pointer"}}>
-  ➕ إضافة بند تطويري ({cat==="أساسية"?"أساسية":cat==="عامة"?"عامة":"فنية"})
+  ➕ {t(cat==="أساسية"?"إضافة بند تطويري (أساسية)":cat==="عامة"?"إضافة بند تطويري (عامة)":"إضافة بند تطويري (فنية)")}
   </button>
   )}
    </div>
@@ -7876,7 +7876,7 @@ function DeptManagerTeam({ user, users, evals, idps, readings, impactData, locks
 }
 
 // المشرف التعليمي (امتداد فني/تميز تعليمي): يتابع المشرفين المختصين في فرعه — تطور مهني + تقييم أداء
-function EduSupervisorTeam({ user, team, users, evals, idps, readings, impactData, locks, setLocks, onSaveEval, onApprovePlan, onOpenCard, showToast, editRequests, approvals, onSaveIdp, onRequestEdit, onOpenPlan, onSaveImpact }) {
+function EduSupervisorTeam({ user, team, users, evals, idps, readings, impactData, locks, setLocks, onSaveEval, onApprovePlan, onOpenCard, showToast, editRequests, approvals, onSaveIdp, onRequestEdit, onOpenPlan, onSaveImpact, onViewTeacherPlan }) {
   const [sub,setSub] = useState("growth");
   const [evalTarget,setEvalTarget] = useState(null);
   const [evalWinAll,setEvalWinAll] = useState({branches:{}});
@@ -7943,7 +7943,7 @@ function EduSupervisorTeam({ user, team, users, evals, idps, readings, impactDat
     {sub==="growth"
      ? <span style={{fontSize:10,color:ap?"#10B981":"#F59E0B",background:ap?"#10B98115":"#F59E0B15",padding:"3px 10px",borderRadius:20,fontWeight:700}}>{ap?"معتمدة":plan.isFinal?"بانتظار":"مسودّة"}</span>
      : <span style={{fontSize:10,color:est?.avg!=null?getLevel(est.avg).color:"#94A3B8",background:"#F4F9FE",padding:"3px 10px",borderRadius:20,fontWeight:700}}>{est?.avg!=null?getLevel(est.avg).label:"—"}</span>}
-    <button onClick={()=>onOpenCard&&onOpenCard(t)} style={{padding:"5px 12px",borderRadius:8,border:"1px solid #0891B240",background:"#0891B210",color:"#0891B2",fontSize:11,cursor:"pointer",fontWeight:700}}>{sub==="growth"?"👁️ الخطة":"👁️ التقييم"}</button>
+    <button onClick={()=>{ if(sub==="growth"){ onViewTeacherPlan&&onViewTeacherPlan(t); } else { onOpenCard&&onOpenCard(t); } }} style={{padding:"5px 12px",borderRadius:8,border:"1px solid #0891B240",background:"#0891B210",color:"#0891B2",fontSize:11,cursor:"pointer",fontWeight:700}}>{sub==="growth"?"👁️ الخطة":"👁️ التقييم"}</button>
     </div>
     );
    })}
@@ -8057,6 +8057,7 @@ function EmployeePanel({ user, onLogout }) {
   setImpactData(ni); await st.set("impact_360c",ni); showToast("✓ حُفظ قياس الأثر");
   };
   const [eduPlanTarget,setEduPlanTarget] = useState(null);
+  const [eduTeacherView,setEduTeacherView] = useState(null); // v68: عرض خطة المعلم (للعرض فقط) للمشرف التعليمي
   const [editRequests,setEditRequests] = useState({});
   const saveTeamEval = async (targetId, party, scores) => {
   const ne={...evals}; if(!ne[targetId])ne[targetId]={}; ne[targetId][party]=scores;
@@ -8340,7 +8341,7 @@ function EmployeePanel({ user, onLogout }) {
   {empTab==="supteam"&&isEduSupervisor&&(
   <EduSupervisorTeam user={user} team={eduSupTeam} users={users} evals={evals} idps={idps} readings={readings} impactData={impactData}
    locks={locks} setLocks={setLocks} onSaveEval={saveTeamEval} onApprovePlan={approveTeamPlan}
-   editRequests={editRequests} approvals={approvals} onSaveIdp={saveEduTeamIdp} onRequestEdit={requestEditEdu} onOpenPlan={setEduPlanTarget} onSaveImpact={saveImpactEdu}
+   editRequests={editRequests} approvals={approvals} onSaveIdp={saveEduTeamIdp} onRequestEdit={requestEditEdu} onOpenPlan={setEduPlanTarget} onSaveImpact={saveImpactEdu} onViewTeacherPlan={setEduTeacherView}
    onOpenCard={(u)=>{ setTeamCardTarget(u); }} showToast={showToast}/>
   )}
 
@@ -8391,6 +8392,27 @@ function EmployeePanel({ user, onLogout }) {
    idpData={idps[eduPlanTarget.id]}
    onSave={async d=>{const ni={...idps,[eduPlanTarget.id]:d};setIdpsState(ni);await st.set("idps_360c",ni);showToast("✓ تم حفظ الخطة");}}
    viewerRole="supervisor"
+   impactData={impactData}
+   />
+   </div>
+   </div>
+   )}
+   {eduTeacherView&&(
+   <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:12}}>
+   <div style={{background:"#FFFFFF",border:"1px solid #B3D0EA",borderRadius:20,width:"100%",maxWidth:780,maxHeight:"95vh",overflowY:"auto",padding:24}}>
+   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+   <div>
+   <div style={{fontSize:15,color:"#2E7FB8",fontWeight:900}}>🎯 خطة التطور المهني — {eduTeacherView.name}</div>
+   <div style={{fontSize:11,color:"#5B7A9E",marginTop:2}}>{eduTeacherView.job}{eduTeacherView.branch?` • ${eduTeacherView.branch}`:""} • للعرض فقط</div>
+   </div>
+   <button onClick={()=>setEduTeacherView(null)} style={{background:"none",border:"none",color:"#5B7A9E",fontSize:22,cursor:"pointer"}}>✕</button>
+   </div>
+   <EmployeeGrowthPlan
+   user={eduTeacherView}
+   empEval={evals[eduTeacherView.id]||{}}
+   idpData={idps[eduTeacherView.id]}
+   onSave={()=>{}}
+   viewerRole="viewer"
    impactData={impactData}
    />
    </div>

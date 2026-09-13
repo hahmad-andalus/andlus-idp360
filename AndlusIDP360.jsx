@@ -454,6 +454,7 @@ const BRANCHES_LIST = [
   "أندلس المنار بنين","أندلس المنار بنات",
   "أندلس أبحر بنين","أندلس أبحر بنات",
   "أندلس الرياض بنين","أندلس الرياض بنات",
+  "أندلس المدينة المنورة بنين","أندلس المدينة المنورة بنات",
   "بدون",
 ];
 
@@ -524,6 +525,11 @@ const isCertEligible = (u) => u && CERT_ELIGIBLE_ROLES.includes(u.role);
 const CERT_STATUS = { none:"لم يبدأ", inprogress:"جارٍ", earned:"حصل عليها" };
 const CERT_STATUS_COLOR = { none:"#94A3B8", inprogress:"#F59E0B", earned:"#10B981" };
 const IDP_TRAIN_METHODS = ["دورة حضورية داخلية (من إدارة التدريب)","التدريب الحضوري أو الإفتراضي","اللقاءات المهنية والندوات","مشاهدة الوسائط المعلوماتية","القراءة في مجال التخصص","إنشاء محتوى في مجال التخصص","التحدث في اللقاءات أو المؤتمرات","مشاركة المعرفة بالتدريب أو التوجيه"];
+// v67: قائمة الإدخال اليدوي لخطة الموظف — بلا «دورة حضورية داخلية» (تلك تُدار من إدارة التدريب لا الموظف)
+const IDP_TRAIN_METHODS_MANUAL = IDP_TRAIN_METHODS.filter(m => !m.includes("دورة حضورية داخلية"));
+// v67: حدّا تاريخ تخطيط التطور المهني (لا قبل 16/8/2026 ولا بعد 30/6/2027)
+const IDP_DATE_MIN = "2026-08-16";
+const IDP_DATE_MAX = "2027-06-30";
 const IDP_EVAL_METHODS = ["المجموعات التخصصية Focus group","الملاحظة المباشرة من المتابع الفني Observation","التغذية الراجعة من الزملاء أو المدير المباشر Feedback","استطلاعات العملاء أو التعليقات أو الشكاوى Poll","إنجاز مرتبط بموضوع التعلم Achievement","التقييم القبلي والبعدي Pre/Post"];
 
 const _IMP3 = ["مدى إلمام المتدرب بالمحتوى التدريبي","مدى قدرة المتدرب على تطبيق المحتوى التدريبي في بيئة عمله","إتقان المتدرب للمهارات التي تتضمنها هذه الدورة أو هذا المحتوى"];
@@ -7421,7 +7427,7 @@ function EmployeeGrowthPlan({ user, empEval, idpData, onSave, viewerRole, impact
    {/* الحقلان اليدويان */}
    <div>
    <label style={lS}>📅 تاريخ التنفيذ المتوقع</label>
-   <input type="date" readOnly={!canEditFields} value={F("targetDate")} onChange={e=>setF("targetDate",e.target.value)} style={iS}/>
+   <input type="date" min={IDP_DATE_MIN} max={IDP_DATE_MAX} readOnly={!canEditFields} value={F("targetDate")} onChange={e=>{const v=e.target.value; if(v&&(v<IDP_DATE_MIN||v>IDP_DATE_MAX))return; setF("targetDate",v);}} style={iS}/>
    <div style={{fontSize:9,color:"#8CA3BD",marginTop:3,lineHeight:1.5}}>💡 يُفضّل الانتهاء من تنفيذ الدورات خلال الفصل الدراسي الأول</div>
    </div>
    <div>
@@ -7446,7 +7452,7 @@ function EmployeeGrowthPlan({ user, empEval, idpData, onSave, viewerRole, impact
    <label style={lS}>🎓 أسلوب التدريب</label>
    <select disabled={!canEditFields} value={F("trainMethod")} onChange={e=>setF("trainMethod",e.target.value)} style={{...iS,color:F("trainMethod")?"#15385C":"#5B7A9E"}}>
    <option value="">— اختر —</option>
-   {IDP_TRAIN_METHODS.map(o=><option key={o} value={o}>{o}</option>)}
+   {IDP_TRAIN_METHODS_MANUAL.map(o=><option key={o} value={o}>{o}</option>)}
    </select>
    </div>
    <div style={{gridColumn:"1 / -1"}}>
@@ -7474,7 +7480,7 @@ function EmployeeGrowthPlan({ user, empEval, idpData, onSave, viewerRole, impact
    </div>
    <div>
    <label style={lS}>📅 تاريخ التنفيذ المتوقع</label>
-   <input type="date" readOnly={!canEditFields} value={F("targetDate")} onChange={e=>setF("targetDate",e.target.value)} style={iS}/>
+   <input type="date" min={IDP_DATE_MIN} max={IDP_DATE_MAX} readOnly={!canEditFields} value={F("targetDate")} onChange={e=>{const v=e.target.value; if(v&&(v<IDP_DATE_MIN||v>IDP_DATE_MAX))return; setF("targetDate",v);}} style={iS}/>
    <div style={{fontSize:9,color:"#8CA3BD",marginTop:3,lineHeight:1.5}}>💡 يُفضّل الانتهاء من تنفيذ الدورات خلال الفصل الدراسي الأول</div>
    </div>
    <div style={{gridColumn:"1 / -1"}}>
@@ -7870,7 +7876,7 @@ function DeptManagerTeam({ user, users, evals, idps, readings, impactData, locks
 }
 
 // المشرف التعليمي (امتداد فني/تميز تعليمي): يتابع المشرفين المختصين في فرعه — تطور مهني + تقييم أداء
-function EduSupervisorTeam({ user, team, users, evals, idps, readings, impactData, locks, setLocks, onSaveEval, onApprovePlan, onOpenCard, showToast }) {
+function EduSupervisorTeam({ user, team, users, evals, idps, readings, impactData, locks, setLocks, onSaveEval, onApprovePlan, onOpenCard, showToast, editRequests, approvals, onSaveIdp, onRequestEdit, onOpenPlan, onSaveImpact }) {
   const [sub,setSub] = useState("growth");
   const [evalTarget,setEvalTarget] = useState(null);
   const [evalWinAll,setEvalWinAll] = useState({branches:{}});
@@ -7903,7 +7909,21 @@ function EduSupervisorTeam({ user, team, users, evals, idps, readings, impactDat
    <div style={{textAlign:"center",padding:36,color:"#5B7A9E",background:"#fff",borderRadius:12}}>لا يوجد مشرفون مختصون في فرعك بعد.</div>
    )}
 
-   {/* لكل مشرف مختص: معلموه وخططهم/تقييماتهم */}
+   {/* v67: خطط المشرفين المختصين أنفسهم — اعتماد فني كامل (كما يعتمد المشرف المختص خطة المعلم) */}
+   {sub==="growth"&&team.length>0&&(
+   <div style={{marginBottom:18}}>
+   <div style={{fontSize:13,fontWeight:900,color:"#0891B2",marginBottom:8}}>🎓 خطط المشرفين المختصين — الاعتماد الفني</div>
+   <SupervisorTeamGrowth
+    myTargets={team} idps={idps} evals={evals} editRequests={editRequests} approvals={approvals} impactData={impactData} onSaveImpact={onSaveImpact}
+    user={user}
+    onApprove={onSaveIdp} onSaveIdp={onSaveIdp} onRequestEdit={onRequestEdit}
+    onOpenPlan={onOpenPlan}
+   />
+   </div>
+   )}
+
+   {/* لكل مشرف مختص: معلموه (للعرض فقط) */}
+   {sub==="growth"&&<div style={{fontSize:13,fontWeight:900,color:"#5B7A9E",margin:"6px 0 8px"}}>👥 معلمو المشرفين المختصين (للعرض فقط)</div>}
    {team.length>0&&team.map(sup=>{
    const teachers = teachersOf(sup.id);
    return (
@@ -7934,35 +7954,8 @@ function EduSupervisorTeam({ user, team, users, evals, idps, readings, impactDat
 
    {/* القسم الأصلي: خطط/تقييمات المشرفين المختصين أنفسهم */}
    <details style={{marginTop:8,background:"#fff",border:"1px solid #E3EEF9",borderRadius:14,overflow:"hidden"}}>
-   <summary style={{padding:"12px 14px",cursor:"pointer",fontSize:12,fontWeight:800,color:"#0891B2",listStyle:"none"}}>📋 خطط وتقييمات المشرفين المختصين أنفسهم (اضغط للعرض)</summary>
+   <summary style={{padding:"12px 14px",cursor:"pointer",fontSize:12,fontWeight:800,color:"#0891B2",listStyle:"none"}}>📊 تقييم أداء المشرفين المختصين أنفسهم (اضغط للعرض)</summary>
    <div style={{padding:"10px 14px"}}>
-
-   {sub==="growth"&&team.length>0&&team.map(u=>{
-   const plan=idps[u.id]||{}; const rows=plan.plan||[]; const ap=plan.approved;
-   return(
-   <details key={u.id} style={{background:"#fff",border:`1px solid ${ap?"#10B98125":"#E3EEF9"}`,borderRadius:14,marginBottom:8,overflow:"hidden"}}>
-   <summary style={{padding:"11px 14px",cursor:"pointer",listStyle:"none",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-   <div style={{width:32,height:32,borderRadius:9,background:ap?"#10B98115":"#F4F9FE",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>{ap?"✅":"🎯"}</div>
-   <div style={{flex:1,minWidth:0}}><div style={{fontWeight:700,fontSize:12,color:"#15385C"}}>{u.name}</div><div style={{fontSize:10,color:"#8CA3BD"}}>مشرف مختص{u.branch?` • ${u.branch}`:""} • {rows.length} بند</div></div>
-   <span style={{fontSize:10,color:ap?"#10B981":"#F59E0B",background:ap?"#10B98115":"#F59E0B15",padding:"3px 10px",borderRadius:20,fontWeight:700}}>{ap?"معتمدة":plan.isFinal?"بانتظار الاعتماد":"مسودّة"}</span>
-   {onApprovePlan&&plan.isFinal&&(ap
-    ? <button onClick={(e)=>{e.preventDefault();onApprovePlan(u.id,false);}} style={{padding:"5px 12px",borderRadius:8,border:"1px solid #EF444430",background:"#EF444410",color:"#EF4444",fontSize:11,cursor:"pointer",fontWeight:700}}>↩ إلغاء الاعتماد</button>
-    : <button onClick={(e)=>{e.preventDefault();onApprovePlan(u.id,true);}} style={{padding:"5px 12px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#059669,#10B981)",color:"#fff",fontSize:11,cursor:"pointer",fontWeight:700}}>✅ اعتماد</button>
-   )}
-   <button onClick={(e)=>{e.preventDefault();onOpenCard&&onOpenCard(u);}} style={{padding:"5px 12px",borderRadius:8,border:"1px solid #10B98140",background:"#10B98110",color:"#059669",fontSize:11,cursor:"pointer",fontWeight:700}}>👁️ عرض الخطة</button>
-   </summary>
-   <div style={{padding:"0 14px 12px",borderTop:"1px solid #EEF4FB"}}>
-   {rows.length===0?<div style={{textAlign:"center",padding:12,color:"#8CA3BD",fontSize:12}}>لا خطة بعد</div>:rows.map((r,i)=>{
-   const sc=statusColor[r.status]||"#8CA3BD";
-   return(<div key={r.id} style={{background:"#F4F9FE",border:`1px solid ${sc}25`,borderRadius:10,padding:"8px 12px",marginTop:8,display:"flex",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}>
-   <span style={{flex:1,minWidth:0,fontSize:12,color:"#15385C",fontWeight:700}}>{r.cat?`[${r.cat}] `:""}{r.programName||r.comp||`بند ${i+1}`}</span>
-   <span style={{fontSize:10,color:sc,background:`${sc}15`,padding:"3px 10px",borderRadius:20,fontWeight:700}}>{r.status||"لم يتم"}</span>
-   </div>);
-   })}
-   </div>
-   </details>
-   );
-   })}
 
    {sub==="eval"&&team.length>0&&team.map(u=>{
    const es=getEmpFullStats(u,evals[u.id]||{}); const pct=es?.avg!=null?(es.avg/5)*100:null; const lv=es?.avg!=null?getLevel(es.avg):null;
@@ -8020,9 +8013,9 @@ function EmployeePanel({ user, onLogout }) {
   const showToast = (msg,c="#10B981") => { setToast({msg,c}); setTimeout(()=>setToast(null),2000); };
 
   const loadData = ()=>{
-  Promise.all([st.get("users_360c"),st.get("evals_360c"),st.get("idps_360c"),st.get("evalwindow_360c"),st.get("readings_360c"),st.get("locks_360c"),st.get("approvals_360c"),st.get("impact_360c")]).then(([u,e,i,w,r,l,a,im])=>{
+  Promise.all([st.get("users_360c"),st.get("evals_360c"),st.get("idps_360c"),st.get("evalwindow_360c"),st.get("readings_360c"),st.get("locks_360c"),st.get("approvals_360c"),st.get("impact_360c"),st.get("editreq_360c")]).then(([u,e,i,w,r,l,a,im,er])=>{
    const myWin = (w&&w.branches) ? (w.branches[user.branch]||{isOpen:false}) : (w||{isOpen:false});
-   setUsersState(u||[]); setEvalsState(e||{}); setIdpsState(i||{}); setEvalWindowData(myWin); setEvalWinAll(w||{branches:{}}); setReadings(r||{}); setLocks(l||{}); setApprovals(a||{}); setImpactData(im||{}); setLoaded(true);
+   setUsersState(u||[]); setEvalsState(e||{}); setIdpsState(i||{}); setEvalWindowData(myWin); setEvalWinAll(w||{branches:{}}); setReadings(r||{}); setLocks(l||{}); setApprovals(a||{}); setImpactData(im||{}); setEditRequests(er||{}); setLoaded(true);
   });
   if (canReqAccounts) st.get("acctRequests_360c").then(d=>setAcctRequests(Array.isArray(d)?d:[]));
   Promise.all([st.get("round2_360c"),st.get("twiceeval_360c")]).then(([r2,tw])=>setRound2Ctx(r2?.open,tw||[])); // ب-4
@@ -8048,6 +8041,23 @@ function EmployeePanel({ user, onLogout }) {
   setIdpsState(ni); await st.set("idps_360c",ni);
   showToast(approve?"✅ اعتُمدت الخطة":"↩ أُلغي الاعتماد");
   };
+  // v67: دوال المشرف التعليمي لاعتماد خطط المشرفين المختصين فنيّاً (نفس آلية اعتماد المشرف المختص للمعلم)
+  const saveEduTeamIdp = async (targetId, d) => {
+  const ni = {...idps,[targetId]:d};
+  setIdpsState(ni); await st.set("idps_360c",ni);
+  };
+  const requestEditEdu = async (targetId, payload) => {
+  const nr = {...editRequests};
+  nr[targetId] = { ...payload, requestedBy:user.name, requesterId:user.id, at:new Date().toISOString().split("T")[0], status:"pending", branch:user.branch };
+  setEditRequests(nr); await st.set("editreq_360c",nr);
+  showToast("✓ أُرسل طلب التعديل لمدير الفرع");
+  };
+  const saveImpactEdu = async (empId, rowId, data) => {
+  const ni = {...impactData, [`${empId}__${rowId}`]:data};
+  setImpactData(ni); await st.set("impact_360c",ni); showToast("✓ حُفظ قياس الأثر");
+  };
+  const [eduPlanTarget,setEduPlanTarget] = useState(null);
+  const [editRequests,setEditRequests] = useState({});
   const saveTeamEval = async (targetId, party, scores) => {
   const ne={...evals}; if(!ne[targetId])ne[targetId]={}; ne[targetId][party]=scores;
   setEvalsState(ne); await st.set("evals_360c",ne);
@@ -8330,6 +8340,7 @@ function EmployeePanel({ user, onLogout }) {
   {empTab==="supteam"&&isEduSupervisor&&(
   <EduSupervisorTeam user={user} team={eduSupTeam} users={users} evals={evals} idps={idps} readings={readings} impactData={impactData}
    locks={locks} setLocks={setLocks} onSaveEval={saveTeamEval} onApprovePlan={approveTeamPlan}
+   editRequests={editRequests} approvals={approvals} onSaveIdp={saveEduTeamIdp} onRequestEdit={requestEditEdu} onOpenPlan={setEduPlanTarget} onSaveImpact={saveImpactEdu}
    onOpenCard={(u)=>{ setTeamCardTarget(u); }} showToast={showToast}/>
   )}
 
@@ -8364,6 +8375,27 @@ function EmployeePanel({ user, onLogout }) {
    {roleEvalTarget&&<RoleEvalForm party={roleEvalTarget.party} targetUser={roleEvalTarget.user} existingScores={((evals[roleEvalTarget.user.id]||{})[roleEvalTarget.party+"Raters"]?.[user.id])||{}} onSave={async scores=>{await saveRoleEval(roleEvalTarget.user.id,roleEvalTarget.party,scores);setRoleEvalTarget(null);}} onCancel={()=>setRoleEvalTarget(null)}/>}
    {viewCard&&<Card360 targetUser={user} empEval={evals[user.id]||{}} idpData={idps[user.id]} onSaveIdp={saveIdp} readings={readings} onSaveReadings={async d=>{setReadings(d);await st.set("readings_360c",d);}} currentUser={user} hidePrint allEvals={evals} allUsers={users} approvals={approvals} onClose={()=>setViewCard(false)}/>}
    {teamCardTarget&&<Card360 targetUser={teamCardTarget} empEval={evals[teamCardTarget.id]||{}} idpData={idps[teamCardTarget.id]} readings={readings} onSaveReadings={async d=>{setReadings(d);await st.set("readings_360c",d);}} currentUser={user} allEvals={evals} allUsers={users} approvals={approvals} onClose={()=>setTeamCardTarget(null)}/>}
+   {eduPlanTarget&&(
+   <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:12}}>
+   <div style={{background:"#FFFFFF",border:"1px solid #B3D0EA",borderRadius:20,width:"100%",maxWidth:780,maxHeight:"95vh",overflowY:"auto",padding:24}}>
+   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+   <div>
+   <div style={{fontSize:15,color:"#2E7FB8",fontWeight:900}}>🎯 خطة التطور المهني — {eduPlanTarget.name}</div>
+   <div style={{fontSize:11,color:"#5B7A9E",marginTop:2}}>{eduPlanTarget.job}{eduPlanTarget.branch?` • ${eduPlanTarget.branch}`:""}</div>
+   </div>
+   <button onClick={()=>setEduPlanTarget(null)} style={{background:"none",border:"none",color:"#5B7A9E",fontSize:22,cursor:"pointer"}}>✕</button>
+   </div>
+   <EmployeeGrowthPlan
+   user={{...eduPlanTarget,_approverName:user.name}}
+   empEval={evals[eduPlanTarget.id]||{}}
+   idpData={idps[eduPlanTarget.id]}
+   onSave={async d=>{const ni={...idps,[eduPlanTarget.id]:d};setIdpsState(ni);await st.set("idps_360c",ni);showToast("✓ تم حفظ الخطة");}}
+   viewerRole="supervisor"
+   impactData={impactData}
+   />
+   </div>
+   </div>
+   )}
   </div>
   );
 }

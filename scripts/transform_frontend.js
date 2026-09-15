@@ -22,7 +22,7 @@ const stNew = `const st = {
   set: async (k,v) => { try { await window.andlusAPI.set(k,v); } catch(e){ console.error(e); } },
   getShared: async k => { try { return await window.andlusAPI.getShared(k); } catch(e){ console.error(e); return null; } },
   setShared: async (k,v) => { try { await window.andlusAPI.setShared(k,v); } catch(e){ console.error(e); } },
-  forgotPassword: async (username) => { try { return await window.andlusAPI.forgotPassword(username); } catch(e){ console.error(e); return { ok:true }; } },
+  forgotPassword: async (username) => { try { return await window.andlusAPI.auth.forgotPassword(username); } catch(e){ console.error(e); return { ok:true }; } },
 };`;
 if (stOld.test(code)) { code = code.replace(stOld, stNew); report.push('✓ استُبدل تعريف st'); }
 else report.push('✗ لم يُعثر على تعريف st — راجع يدوياً');

@@ -99,7 +99,7 @@ async function forgotPassword(req, res) {
   const genericMsg = 'إن كان الحساب موجوداً، فسيصلك رابط إعادة التعيين على بريدك.';
   if (!username) return res.status(400).json({ error: 'اسم المستخدم (البريد) مطلوب' });
 
-  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+  const user = db.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE').get(String(username).trim());
   if (user) {
     const token = crypto.randomBytes(24).toString('hex');
     const expires = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // ساعة

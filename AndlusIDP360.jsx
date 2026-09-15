@@ -3228,14 +3228,6 @@ function BranchManagerPanel({ user, onLogout }) {
   },[branchEmps,idps,impactData]);
 
   const pendingReqs = Object.entries(editRequests).filter(([id,r])=>{const e=branchEmps.find(u=>u.id===id);return e&&r.status==="pending";});
-  const newPlans = branchEmps.filter(u=>idps[u.id]?.needsBranchApproval && idps[u.id]?.approved);
-  const approveNewPlan = async (empId) => {
-  const cur = idps[empId]||{};
-  const ni = {...idps,[empId]:{...cur,needsBranchApproval:false,branchApprovedAt:new Date().toISOString().split("T")[0]}};
-  setIdpsState(ni); await st.set("idps_360c",ni);
-  showToast("✅ اعتُمدت خطة الموظف الجديد");
-  };
-
   // الاعتماد النهائي (مدير الفرع) — ضمن سقفه الأوسع؛ يشمل ما تجاوز سقف مدير المرحلة
   const branchCap = branchMgrCap(user, users);
   const approveBranchFinance = async (empId, approve) => {
@@ -3275,7 +3267,7 @@ function BranchManagerPanel({ user, onLogout }) {
   <div style={{display:"flex",gap:8,marginBottom:18,flexWrap:"wrap"}}>
   {[{k:"growth",l:"👥 متابعة التطور المهني",c:"#10B981"},{k:"eval",l:"📋 متابعة تقييم الأداء",c:"#3B82F6"},{k:"approve",l:"✅ اعتماد الخطط والتعديلات",c:"#8B5CF6"},{k:"accounts",l:"➕ طلبات الحسابات",c:"#EC4899"},{k:"mine",l:"🎯 خطتي وتقييمي",c:"#F59E0B"}].map(t=>(
    <button key={t.k} onClick={()=>setTab(t.k)} style={{flex:"1 1 auto",minWidth:160,padding:"13px 18px",borderRadius:24,border:"none",background:tab===t.k?`linear-gradient(135deg,${t.c},${t.c}cc)`:"#fff",color:tab===t.k?"#fff":"#5B7A9E",fontSize:13,fontWeight:800,cursor:"pointer",boxShadow:tab===t.k?`0 8px 22px ${t.c}45`:"0 2px 10px rgba(46,127,184,0.08)",position:"relative"}}>
-   {t.l}{t.k==="approve"&&(pendingReqs.length+newPlans.length)>0&&<span style={{position:"absolute",top:-6,left:-6,background:"#EF4444",color:"#fff",fontSize:10,fontWeight:900,borderRadius:12,minWidth:18,height:18,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 5px"}}>{pendingReqs.length+newPlans.length}</span>}
+   {t.l}{t.k==="approve"&&pendingReqs.length>0&&<span style={{position:"absolute",top:-6,left:-6,background:"#EF4444",color:"#fff",fontSize:10,fontWeight:900,borderRadius:12,minWidth:18,height:18,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"0 5px"}}>{pendingReqs.length}</span>}
    </button>
   ))}
   </div>
@@ -3483,7 +3475,8 @@ function BranchManagerPanel({ user, onLogout }) {
      if(planCost(idp)<=0) return false;
      // المعلم/الإداري: يظهر لمدير الفرع فقط بعد اعتماد مدير المرحلة المالي، أو إذا رُفع إليه لتجاوزه سقف المرحلة
      if(underStageFinance(u)){
-      return idp.financeApproved || idp.needsBranchApproval;
+      // v72: كل موظف (فرداً أو ضمن مرحلة) لا يصل لاعتماد مدير الفرع النهائي إلا بعد الاعتماد المالي من مدير المرحلة — بلا تجاوز
+      return idp.financeApproved;
      }
      // القيادات والمتابعون الفنيون والمشرف المختص: يعتمدهم مدير الفرع مباشرة بعد الاعتماد الفني
      return true;
@@ -3522,34 +3515,6 @@ function BranchManagerPanel({ user, onLogout }) {
     </div>
     );
    })()}
-   {newPlans.length>0&&(
-   <div style={{background:"#10B9810A",border:"1px solid #10B98135",borderRadius:14,padding:16,marginBottom:16}}>
-  <div style={{fontSize:14,fontWeight:900,color:"#059669",marginBottom:4}}>🆕 خطط موظفين جُدد بانتظار الاعتماد ({newPlans.length})</div>
-  <div style={{fontSize:11,color:"#5B7A9E",marginBottom:12}}>موظفون أُضيفوا بعد اعتماد خطط مراحلهم، خطّط لهم المتابع الفني واعتمدها — اعتمدها فردياً لتكتمل.</div>
-  {newPlans.map(u=>{
-  const rows=idps[u.id]?.plan||[];
-  return(
-  <div key={u.id} style={{background:"#fff",border:"1px solid #A7F3D0",borderRadius:12,padding:"12px 14px",marginBottom:8}}>
-  <div style={{display:"flex",justifyContent:"space-between",gap:10,flexWrap:"wrap",alignItems:"center",marginBottom:8}}>
-   <div style={{flex:1,minWidth:180}}>
-   <div style={{fontSize:13,fontWeight:800,color:"#15385C"}}>{u.name} <span style={{fontSize:10,color:"#8CA3BD"}}>• {u.job} • {u.stage}</span></div>
-   <div style={{fontSize:10,color:"#8CA3BD",marginTop:2}}>{rows.length} بند • اعتمده المتابع: {idps[u.id]?.approvedBy||"—"}</div>
-   </div>
-   <button onClick={()=>approveNewPlan(u.id)} style={{padding:"8px 18px",borderRadius:20,border:"none",background:"linear-gradient(135deg,#059669,#10B981)",color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer"}}>✅ اعتماد الخطة</button>
-  </div>
-  <div style={{display:"flex",flexDirection:"column",gap:5}}>
-   {rows.map((r,i)=>(
-   <div key={r.id} style={{background:"#F4F9FE",borderRadius:8,padding:"7px 11px",display:"flex",justifyContent:"space-between",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-   <div style={{flex:1,minWidth:0}}><span style={{fontSize:11,color:"#15385C",fontWeight:700}}>{r.cat?`[${r.cat}] `:""}{r.programName||r.comp||`بند ${i+1}`}</span><span style={{fontSize:10,color:"#8CA3BD"}}>{r.provider?` • ${r.provider}`:""}{r.cost?` • 💰${r.cost}`:""}</span></div>
-   <button onClick={()=>setEditRow({emp:u,row:r})} style={{padding:"3px 9px",borderRadius:7,border:"1px solid #8B5CF640",background:"#8B5CF610",color:"#8B5CF6",fontSize:10,cursor:"pointer",fontWeight:700}}>✏️ تعديل</button>
-   </div>
-   ))}
-  </div>
-  </div>
-  );
-  })}
-   </div>
-   )}
    {pendingReqs.length>0&&(
    <div style={{background:"#F59E0B0A",border:"1px solid #F59E0B35",borderRadius:14,padding:16,marginBottom:16}}>
   <div style={{fontSize:14,fontWeight:900,color:"#D97706",marginBottom:12}}>✏️ طلبات تعديل من المتابعين الفنيين ({pendingReqs.length})</div>
@@ -6100,7 +6065,7 @@ function SupervisorTeamGrowth({ myTargets, idps, evals, editRequests, approvals,
    </select>
    ):<span style={{fontSize:10,color:"#5B7A9E"}}>—</span>}
    </div>
-   {approved&&!isInternalCourse&&<ImpactMeasure row={r} impact={impactData?.[`${u.id}__${r.id}`]} editable onSave={d=>onSaveImpact(u.id,r.id,d)} planApproved={!!approved} branchApproved={!!(approvals&&approvals[`${u.branch}__${u.stage}__plans`]?.approved)}/>}
+   {approved&&!isInternalCourse&&<ImpactMeasure row={r} impact={impactData?.[`${u.id}__${r.id}`]} editable onSave={d=>onSaveImpact(u.id,r.id,d)} planApproved={!!approved} branchApproved={!!(idps[u.id]?.branchFinanceApproved || (approvals&&approvals[`${u.branch}__${u.stage}__plans`]?.approved))}/>}
    {/* ملاحظة المتابع الفني على هذا البند — تصل للموظف */}
    <div style={{marginTop:8,padding:"8px 10px",background:"#3B82F608",border:"1px solid #3B82F620",borderRadius:8}}>
    <div style={{fontSize:10,color:"#3B82F6",fontWeight:700,marginBottom:4}}>📝 ملاحظتك للموظف على هذا البند (تصله ليراعيها)</div>

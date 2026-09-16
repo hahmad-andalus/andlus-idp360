@@ -7315,14 +7315,18 @@ function EmployeeGrowthPlan({ user, empEval, idpData, onSave, viewerRole, impact
   {catRows.map((row)=>{
   const F=(f)=>row[f]||"";
   const setF=(f,v)=>updRow(row.id,f,v);
-  // v73: عند تبديل الوضع، ننظّف حقول المسار السابق الحصرية فقط (نُبقي المشترك: اسم البرنامج، التاريخ، طريقة التقييم، الساعات، التكلفة، الجهة، الرابط)
-  // مسار واحد محدّد: لا تبقى بيانات جدارة/مصدر من المكتبة عند اليدوي، ولا أسلوب تدريب يدوي عند المكتبة.
+  // v73: عند تبديل الوضع، نبدأ البند نظيفاً تماماً (مسار واحد محدّد) — نمسح كل بيانات التخطيط
+  // (المصدر/الجدارة/البرنامج/الجهة/الرابط/التكلفة/الساعات/التاريخ/التقييم/الأسلوب). نُبقي فقط
+  // الفئة والمعرّف والوضع، وأي حالة تنفيذ/ملاحظة متابع إن وُجدت (ليست من بيانات المسار).
   const switchMode = (newMode) => {
    if (row.mode === newMode) return;
-   const clear = newMode==="manual"
-     ? { comp:"", needSource:"" }          // منتقل لليدوي: نمسح ما يخصّ المكتبة
-     : { trainMethod:"" };                  // منتقل للمكتبة: نمسح ما يخصّ اليدوي
-   setIdpPlan(p=>p.map(r=>r.id===row.id?{...r, mode:newMode, ...clear}:r));
+   setIdpPlan(p=>p.map(r=>{
+    if (r.id !== row.id) return r;
+    const keep = {id:r.id, cat:r.cat, mode:newMode};
+    if (r.status !== undefined) keep.status = r.status;
+    if (r.supervisorNote !== undefined) keep.supervisorNote = r.supervisorNote;
+    return keep;
+   }));
   };
   const idx=idpPlan.findIndex(r=>r.id===row.id);
   const rowSources = row.comp ? (getActiveCompMap()[row.comp]||[]) : [];

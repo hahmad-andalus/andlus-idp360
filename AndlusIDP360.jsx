@@ -7089,8 +7089,12 @@ function EmployeeGrowthPlan({ user, empEval, idpData, onSave, viewerRole, impact
    window.addEventListener("focus",onFocus);
    return ()=>{ clearInterval(iv); window.removeEventListener("focus",onFocus); };
   },[]);
-  useEffect(()=>{ setCert(idpData?.certificate||null); },[idpData]);
-  useEffect(()=>{ setIdpPlan(idpData?.plan||[]); setSelSources(idpData?.selSources||{}); setGoals(idpData?.goals||{}); setApproved(idpData?.approved||false); setApprovedBy(idpData?.approvedBy||""); setApprovedAt(idpData?.approvedAt||""); },[idpData]);
+  useEffect(()=>{ setCert(idpData?.certificate||null); },[user.id]);
+  // v73: نُزامن الخطة والمصادر والأهداف (ما يحرّره الموظف) فقط عند فتح خطة موظف جديد — لا عند كل تحميل دوري
+  // وإلا فالتحميل كل 30 ثانية يمحو ما يكتبه/يحذفه الموظف قبل حفظه (كتابة جارية، حذف بند، تغيّر وضع الصف).
+  useEffect(()=>{ setIdpPlan(idpData?.plan||[]); setSelSources(idpData?.selSources||{}); setGoals(idpData?.goals||{}); }, [user.id]);
+  // حالة الاعتماد تأتي من المتابع (لا يحرّرها الموظف) فنُبقيها متزامنة مع الخادم بأمان
+  useEffect(()=>{ setApproved(idpData?.approved||false); setApprovedBy(idpData?.approvedBy||""); setApprovedAt(idpData?.approvedAt||""); },[idpData?.approved,idpData?.approvedBy,idpData?.approvedAt]);
 
   const canEditFields = approved ? (role==="branch_mgr") : (role==="employee"||role==="supervisor");
   const canEditStatus = approved && (role==="employee"||role==="supervisor"||role==="branch_mgr");
@@ -7110,7 +7114,8 @@ function EmployeeGrowthPlan({ user, empEval, idpData, onSave, viewerRole, impact
   const newRow = (cat) => ({id:Date.now().toString()+Math.random().toString(36).slice(2,6),cat:cat||"أساسية",mode:"auto",comp:"",needSource:"",trainMethod:"",programName:"",provider:"",url:"",cost:"",hours:"",targetDate:"",evalMethod:""});
   const addRow    = (cat) => setIdpPlan(p=>[...p,newRow(cat)]);
   const updRow    = (id,f,v) => setIdpPlan(p=>p.map(r=>r.id===id?{...r,[f]:v}:r));
-  const delRow    = (id) => setIdpPlan(p=>p.filter(r=>r.id!==id));
+  // v73: الحذف نيّة صريحة — نحفظه فوراً على الخادم حتى لا يعود البند عند الخروج/الدخول (يصحّح العدّاد)
+  const delRow    = (id) => { const np = (idpPlan||[]).filter(r=>r.id!==id); setIdpPlan(np); onSave({...(idpData||{}),selSources,goals,plan:np,certificate:cert,approved,approvedBy,approvedAt}); };
 
   const compsByCat = useMemo(()=>{
   const res = {أساسية:[],عامة:[],فنية:[]};
@@ -7310,6 +7315,15 @@ function EmployeeGrowthPlan({ user, empEval, idpData, onSave, viewerRole, impact
   {catRows.map((row)=>{
   const F=(f)=>row[f]||"";
   const setF=(f,v)=>updRow(row.id,f,v);
+  // v73: عند تبديل الوضع، ننظّف حقول المسار السابق الحصرية فقط (نُبقي المشترك: اسم البرنامج، التاريخ، طريقة التقييم، الساعات، التكلفة، الجهة، الرابط)
+  // مسار واحد محدّد: لا تبقى بيانات جدارة/مصدر من المكتبة عند اليدوي، ولا أسلوب تدريب يدوي عند المكتبة.
+  const switchMode = (newMode) => {
+   if (row.mode === newMode) return;
+   const clear = newMode==="manual"
+     ? { comp:"", needSource:"" }          // منتقل لليدوي: نمسح ما يخصّ المكتبة
+     : { trainMethod:"" };                  // منتقل للمكتبة: نمسح ما يخصّ اليدوي
+   setIdpPlan(p=>p.map(r=>r.id===row.id?{...r, mode:newMode, ...clear}:r));
+  };
   const idx=idpPlan.findIndex(r=>r.id===row.id);
   const rowSources = row.comp ? (getActiveCompMap()[row.comp]||[]) : [];
   const stColors = {"تم التنفيذ":"#10B981","جاري التنفيذ":"#F59E0B","لم يتم التنفيذ":"#EF4444"};
@@ -7333,7 +7347,7 @@ function EmployeeGrowthPlan({ user, empEval, idpData, onSave, viewerRole, impact
   )}
   <div style={{display:"flex",gap:8,marginBottom:14}}>
    {[{k:"auto",l:"⚡ اختيار من المكتبة"},{k:"manual",l:"✏️ إدخال يدوي"}].map(opt=>(
-   <button key={opt.k} onClick={()=>canEditFields&&setF("mode",opt.k)} disabled={!canEditFields}
+   <button key={opt.k} onClick={()=>canEditFields&&switchMode(opt.k)} disabled={!canEditFields}
    style={{flex:1,padding:"8px",borderRadius:10,border:`2px solid ${row.mode===opt.k?catColor:"#DDE9F5"}`,background:row.mode===opt.k?`${catColor}18`:"transparent",color:row.mode===opt.k?catColor:"#5B7A9E",fontWeight:700,fontSize:12,cursor:canEditFields?"pointer":"default",opacity:canEditFields?1:0.6}}>
    {opt.l}
    </button>

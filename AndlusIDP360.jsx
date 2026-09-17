@@ -192,7 +192,7 @@ function sameBranch(a,b){ return a.branch && a.branch===b.branch; }
 function sameStage(a,b){ return a.stage && a.stage===b.stage; }
 
 // ═══ الاعتماد المالي لخطط التطوّر (فروع فقط) ═══
-const parseCost = (v)=>{ const n=parseFloat(String(v||"").replace(/[^\d.]/g,"")); return isNaN(n)?0:n; };
+const parseCost = (v)=>{ const s=String(v||"").trim(); if(/^مجاني$/i.test(s)) return 0; return /^\d+(\.\d+)?$/.test(s)?parseFloat(s):0; };
 // تكلفة خطة موظف = مجموع تكاليف بنودها
 const planCost = (idp)=> (idp?.plan||[]).reduce((s,r)=>s+parseCost(r.cost),0);
 // المعامل المالي لكل شخص حسب مسمّاه (للسقوف)
@@ -3178,9 +3178,13 @@ function BranchManagerPanel({ user, onLogout }) {
 
   const stagePlanKey = (br,stage)=>`${br}__${stage}__plans`;
   const isStagePlanApproved = (br,stage)=>{
-   // v74: لا تُعرض المرحلة "معتمدة" إلا إن كان بها فعلاً موظفون خاضعون لديهم خطط + سجلّ اعتماد
-   const hasPlans = branchEmps.some(u=>u.branch===br && u.stage===stage && underStageFinance(u) && idps[u.id]?.plan?.length);
-   return hasPlans && !!(approvals[stagePlanKey(br,stage)]?.approved);
+   // v75: المرحلة "معتمدة" فقط إن كانت كل خطط موظفيها الحاليين مكتملة الاعتماد فعليّاً (فني+مالي) + سجلّ اعتماد.
+   // فإن أُضيفت خطة جديدة غير مكتملة الاعتماد، تعود المرحلة تلقائيّاً إلى "بانتظار المتابعين" (لا حالة مجمّدة قديمة).
+   const subj = branchEmps.filter(u=>u.branch===br && u.stage===stage && underStageFinance(u));
+   const withPlans = subj.filter(u=>idps[u.id]?.plan?.length);
+   if (!withPlans.length) return false;
+   const allComplete = withPlans.every(u=>idps[u.id]?.approved && idps[u.id]?.financeApproved);
+   return allComplete && !!(approvals[stagePlanKey(br,stage)]?.approved);
   };
   const stagePlansReady = (br,stage) => {
   // v74: موظفو المرحلة الخاضعون فقط (معلم/إداري) — القيادات (وكيل/مدير مرحلة/مساعد إداري) تحت فئة القيادات لا المرحلة
@@ -3221,8 +3225,8 @@ function BranchManagerPanel({ user, onLogout }) {
   let approvedRows=0, impactMeasured=0;
   branchEmps.forEach(u=>{ const p=idps[u.id]; if(p?.plan?.length){plans++; if(p.approved)approved++;
    p.plan.forEach(r=>{rows++; if(r.status==="تم التنفيذ")done++; else if(r.status==="جاري التنفيذ")inprog++;
-  const h=parseFloat(String(r.hours||"").replace(/[^\d.]/g,"")); if(!isNaN(h))hours+=h;
-  const c=parseFloat(String(r.cost||"").replace(/[^\d.]/g,"")); if(!isNaN(c))cost+=c;
+  const _hs=String(r.hours||"").trim(); const h=/^\d+(\.\d+)?$/.test(_hs)?parseFloat(_hs):0; if(!isNaN(h))hours+=h;
+  const _cs=String(r.cost||"").trim(); const c=/^\d+(\.\d+)?$/.test(_cs)?parseFloat(_cs):0; if(!isNaN(c))cost+=c;
   // نسبة قياس الأثر: من البنود في الخطط المعتمدة، كم بنداً قِيس أثره
   if(p.approved){ approvedRows++;
    const im=impactData[`${u.id}__${r.id}`];
@@ -4489,8 +4493,8 @@ function ExecGrowthReport({ users, idps, approvals, impactData, onOpenPlan }) {
   if(r.status==="تم التنفيذ"){done++;byBranch[u.branch].done++;}
   else if(r.status==="جاري التنفيذ") inprog++;
   else notyet++;
-  const h=parseFloat(String(r.hours||"").replace(/[^\d.]/g,"")); if(!isNaN(h))hours+=h;
-  const c=parseFloat(String(r.cost||"").replace(/[^\d.]/g,"")); if(!isNaN(c))cost+=c;
+  const _hs=String(r.hours||"").trim(); const h=/^\d+(\.\d+)?$/.test(_hs)?parseFloat(_hs):0; if(!isNaN(h))hours+=h;
+  const _cs=String(r.cost||"").trim(); const c=/^\d+(\.\d+)?$/.test(_cs)?parseFloat(_cs):0; if(!isNaN(c))cost+=c;
   if(p.approved){ approvedRows++;
    const im=(impactData||{})[`${u.id}__${r.id}`];
    if(im&&im.scores&&Object.keys(im.scores).length>0) impactMeasured++;
@@ -6350,7 +6354,7 @@ function StageManagerPanel({ user, onLogout }) {
   p.plan.forEach(r=>{ totalRows++;
   if(r.status==="تم التنفيذ") doneRows++;
   else if(r.status==="جاري التنفيذ") inProgRows++;
-  const h=parseFloat(String(r.hours||"").replace(/[^\d.]/g,"")); if(!isNaN(h))totalHours+=h;
+  const _hs=String(r.hours||"").trim(); const h=/^\d+(\.\d+)?$/.test(_hs)?parseFloat(_hs):0; if(!isNaN(h))totalHours+=h;
   const c=parseFloat(String(r.cost||"").replace(/[^\d.]/g,"")); if(!isNaN(c))totalCost+=c;
   if(p.approved){ approvedRows++;
    const im=impactData[`${u.id}__${r.id}`];
@@ -7170,7 +7174,7 @@ function EmployeeGrowthPlan({ user, empEval, idpData, onSave, viewerRole, impact
     return need.some(f => !r[f] || String(r[f]).trim()==="");
    };
    const incompleteRows = idpPlan.filter(rowIncomplete);
-   const totalHours = idpPlan.reduce((s,r) => s + (parseFloat(String(r.hours||"").replace(/[^\d.]/g,"")) || 0), 0);
+   const totalHours = idpPlan.reduce((s,r) => { const _hs=String(r.hours||"").trim(); return s + (/^\d+(\.\d+)?$/.test(_hs)?parseFloat(_hs):0); }, 0);
    const ok = idpPlan.length>0 && missingCats.length===0 && incompleteRows.length===0 && totalHours>=minHours;
    return { ok, missingCats, incompleteCount: incompleteRows.length, totalHours };
   })();
@@ -7200,7 +7204,7 @@ function EmployeeGrowthPlan({ user, empEval, idpData, onSave, viewerRole, impact
   const totals = useMemo(()=>{
   let hours=0, cost=0, done=0, inProgress=0;
   idpPlan.forEach(r=>{
-   const h = parseFloat(String(r.hours||"").replace(/[^\d.]/g,""));
+   const _hs=String(r.hours||"").trim(); const h = /^\d+(\.\d+)?$/.test(_hs)?parseFloat(_hs):0;
    const c = parseFloat(String(r.cost||"").replace(/[^\d.]/g,""));
    if(!isNaN(h)) hours += h;
    if(!isNaN(c)) cost += c;
@@ -7412,7 +7416,7 @@ function EmployeeGrowthPlan({ user, empEval, idpData, onSave, viewerRole, impact
    {!F("hours")&&canEditFields&&(
    <div style={{marginTop:10,display:"flex",alignItems:"center",gap:8}}>
    <label style={{...lS,marginBottom:0,whiteSpace:"nowrap"}}>⏱️ عدد الساعات *</label>
-   <input type="number" min="0" value={F("hours")} onChange={e=>setF("hours",e.target.value)} placeholder="أدخل عدد الساعات" style={{...iS,maxWidth:180}}/>
+   <input type="number" min="0" value={F("hours")} onChange={e=>{const v=e.target.value; if(v===""||/^\d+$/.test(v)) setF("hours",v);}} placeholder="أدخل عدد الساعات" style={{...iS,maxWidth:180}}/>
    <span style={{fontSize:9,color:"#94A3B8"}}>لم تُحدَّد في المكتبة — أدخلها لإكمال الخطة</span>
    </div>
    )}
@@ -7467,12 +7471,12 @@ function EmployeeGrowthPlan({ user, empEval, idpData, onSave, viewerRole, impact
    </div>
    </div>
    <div>
-   <label style={lS}>💰 التكلفة</label>
-   <input readOnly={!canEditFields} value={F("cost")} onChange={e=>setF("cost",e.target.value)} placeholder="ريال / مجاني" style={iS}/>
+   <label style={lS}>💰 التكلفة (رقم فقط — للمجاني اكتب 0)</label>
+   <input type="number" min="0" readOnly={!canEditFields} value={F("cost")} onChange={e=>{const v=e.target.value; if(v===""||/^\d+(\.\d+)?$/.test(v)) setF("cost",v);}} placeholder="التكلفة بالريال (0 للمجاني)" style={iS}/>
    </div>
    <div>
    <label style={lS}>⏱️ عدد الساعات</label>
-   <input readOnly={!canEditFields} value={F("hours")} onChange={e=>setF("hours",e.target.value)} style={iS}/>
+   <input type="number" min="0" readOnly={!canEditFields} value={F("hours")} onChange={e=>{const v=e.target.value; if(v===""||/^\d+$/.test(v)) setF("hours",v);}} style={iS}/>
    </div>
    <div>
    <label style={lS}>📅 تاريخ التنفيذ المتوقع</label>

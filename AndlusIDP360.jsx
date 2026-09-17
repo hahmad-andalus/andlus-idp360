@@ -3177,12 +3177,18 @@ function BranchManagerPanel({ user, onLogout }) {
   };
 
   const stagePlanKey = (br,stage)=>`${br}__${stage}__plans`;
-  const isStagePlanApproved = (br,stage)=>!!(approvals[stagePlanKey(br,stage)]?.approved);
+  const isStagePlanApproved = (br,stage)=>{
+   // v74: لا تُعرض المرحلة "معتمدة" إلا إن كان بها فعلاً موظفون خاضعون لديهم خطط + سجلّ اعتماد
+   const hasPlans = branchEmps.some(u=>u.branch===br && u.stage===stage && underStageFinance(u) && idps[u.id]?.plan?.length);
+   return hasPlans && !!(approvals[stagePlanKey(br,stage)]?.approved);
+  };
   const stagePlansReady = (br,stage) => {
-  const emps = branchEmps.filter(u=>u.branch===br && u.stage===stage);
+  // v74: موظفو المرحلة الخاضعون فقط (معلم/إداري) — القيادات (وكيل/مدير مرحلة/مساعد إداري) تحت فئة القيادات لا المرحلة
+  const emps = branchEmps.filter(u=>u.branch===br && u.stage===stage && underStageFinance(u));
   const withPlans = emps.filter(u=>idps[u.id]?.plan?.length);
   if (!withPlans.length) return false;
-  return withPlans.every(u=>idps[u.id]?.approved); // كلها معتمدة فنياً
+  // لا يُتاح الاعتماد النهائي إلا باكتمال الاعتماد الفني (approved) والمالي (financeApproved) لكل الخطط
+  return withPlans.every(u=>idps[u.id]?.approved && idps[u.id]?.financeApproved);
   };
   const approveStagePlans = async (br,stage) => {
   if (!stagePlansReady(br,stage)) { showToast("⚠️ لا يمكن الاعتماد: بعض الخطط لم يعتمدها المتابع الفني بعد","#F59E0B"); return; }
@@ -3541,7 +3547,7 @@ function BranchManagerPanel({ user, onLogout }) {
    )}
    <div style={{background:"#8B5CF60D",border:"1px solid #8B5CF630",borderRadius:12,padding:"12px 16px",marginBottom:14,fontSize:12,color:"#5B7A9E",lineHeight:1.7}}>بداية العام: اعتمد إجمالي خطط كل مرحلة بعد اعتماد كل المتابعين الفنيين لها. يمكنك تعديل أي بند تراه غير مناسب أو مرتفع التكلفة (تغيير مباشر).</div>
    {brStagePairs.map(({br,stage})=>{
-   const emps = branchEmps.filter(u=>u.branch===br && u.stage===stage);
+   const emps = branchEmps.filter(u=>u.branch===br && u.stage===stage && underStageFinance(u));
    const empsWithPlans = emps.filter(u=>idps[u.id]?.plan?.length);
    const ready = stagePlansReady(br,stage);
    const apPlan = isStagePlanApproved(br,stage);
@@ -7098,6 +7104,11 @@ function EmployeeGrowthPlan({ user, empEval, idpData, onSave, viewerRole, impact
 
   const canEditFields = approved ? (role==="branch_mgr") : (role==="employee"||role==="supervisor");
   const canEditStatus = approved && (role==="employee"||role==="supervisor"||role==="branch_mgr");
+  // v74: حالة التنفيذ لخطط المعلم/الإداري لا تُتاح إلا بعد اكتمال السلسلة: فني (approved) ← مالي (financeApproved) ← نهائي (branchFinanceApproved).
+  // القيادات وغيرهم لا يمرّون بمدير المرحلة، فيكفيهم الاعتماد الفوني/النهائي كما هو.
+  const isRegularStaff = user.role==="employee";
+  const fullyApproved = isRegularStaff ? !!idpData?.branchFinanceApproved : approved;
+  const canEditStatusFinal = fullyApproved && (role==="employee"||role==="supervisor"||role==="branch_mgr");
   const canApprove = role==="supervisor";
 
   const comps = getActiveJobs()[user.job]||[];
@@ -7372,6 +7383,7 @@ function EmployeeGrowthPlan({ user, empEval, idpData, onSave, viewerRole, impact
    <label style={lS}>🎯 الجدارة ({cat})</label>
    <select disabled={!canEditFields} value={F("comp")} onChange={e=>{setF("comp",e.target.value);setF("programName","");}} style={{...iS,color:F("comp")?"#15385C":"#5B7A9E"}}>
    <option value="">— اختر الجدارة —</option>
+   {F("comp")&&!catComps.includes(F("comp"))&&<option value={F("comp")}>{F("comp")}</option>}
    {catComps.map(c=><option key={c} value={c}>{c}</option>)}
    </select>
    </div>
@@ -7435,6 +7447,7 @@ function EmployeeGrowthPlan({ user, empEval, idpData, onSave, viewerRole, impact
    <label style={lS}>🎓 أسلوب التدريب</label>
    <select disabled={!canEditFields} value={F("trainMethod")} onChange={e=>setF("trainMethod",e.target.value)} style={{...iS,color:F("trainMethod")?"#15385C":"#5B7A9E"}}>
    <option value="">— اختر —</option>
+   {F("trainMethod")&&!IDP_TRAIN_METHODS_MANUAL.includes(F("trainMethod"))&&<option value={F("trainMethod")}>{F("trainMethod")}</option>}
    {IDP_TRAIN_METHODS_MANUAL.map(o=><option key={o} value={o}>{o}</option>)}
    </select>
    </div>
@@ -7476,12 +7489,12 @@ function EmployeeGrowthPlan({ user, empEval, idpData, onSave, viewerRole, impact
    </div>
   )}
 
-  {/* قائمة حالة التنفيذ — بعد الاعتماد */}
-  {approved&&(
+  {/* قائمة حالة التنفيذ — بعد اكتمال الاعتماد النهائي (فني+مالي+نهائي للمعلم/الإداري) */}
+  {fullyApproved&&(
    <div style={{marginTop:14,paddingTop:14,borderTop:`1px solid ${stColor}20`}}>
    <label style={{...lS,color:stColor}}>📍 حالة تنفيذ الدورة</label>
-   <select value={row.status||"لم يتم التنفيذ"} disabled={!canEditStatus} onChange={e=>setRowStatus(row.id,e.target.value)}
-   style={{...iS,color:stColor,fontWeight:700,border:`1px solid ${stColor}40`,cursor:canEditStatus?"pointer":"default",opacity:canEditStatus?1:0.7}}>
+   <select value={row.status||"لم يتم التنفيذ"} disabled={!canEditStatusFinal} onChange={e=>setRowStatus(row.id,e.target.value)}
+   style={{...iS,color:stColor,fontWeight:700,border:`1px solid ${stColor}40`,cursor:canEditStatusFinal?"pointer":"default",opacity:canEditStatusFinal?1:0.7}}>
    {["لم يتم التنفيذ","جاري التنفيذ","تم التنفيذ"].map(s=><option key={s} value={s}>{s}</option>)}
    </select>
    </div>

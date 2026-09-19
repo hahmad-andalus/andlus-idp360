@@ -3120,6 +3120,7 @@ function BranchManagerPanel({ user, onLogout }) {
   setIdpsState(ni); await st.set("idps_360c",ni);
   showToast(approve?"✅ اعتُمدت خطة القيادي":"↩ أُلغي الاعتماد");
   };
+  const saveImpact = async (empId,rowId,data) => { const ni={...impactData,[`${empId}__${rowId}`]:data}; setImpactData(ni); await st.set("impact_360c",ni); showToast("✓ حُفظ قياس الأثر"); };
   // ج-1: إرسال طلب فتح حساب
   const submitAcctRequest = async (payload) => {
   const req = { ...payload, id:(typeof crypto!=="undefined"&&crypto.randomUUID?crypto.randomUUID():String(Date.now())), status:"pending", requesterId:user.id, requesterName:user.name, createdAt:new Date().toISOString().split("T")[0] };
@@ -3153,8 +3154,15 @@ function BranchManagerPanel({ user, onLogout }) {
   const myBranches = scopeBranches(user);
   // متابعة مدير الفرع تشمل: الموظفين + مدراء المراحل والوكلاء التابعين لفروعه (لتقييمهم ومتابعة نتائجهم)
   const branchEmps = (users||[]).filter(u=>["employee","stage_mgr","deputy"].includes(u.role) && myBranches.includes(u.branch));
-  // قيادات الفرع (مدراء المراحل والوكلاء) — يقيّمهم مدير الفرع ويعتمد خططهم، ويُعرضون منفصلين عن مجموعات المراحل
+  // قيادات الفرع (مدراء المراحل والوكلاء والمساعدون الإداريون) — يقيّمهم مدير الفرع ويعتمد خططهم، ويُعرضون منفصلين عن مجموعات المراحل
   const branchLeaders = (users||[]).filter(u=>["stage_mgr","deputy"].includes(u.role) && myBranches.includes(u.branch));
+  // ═══ الفئات الثلاث لمتابعة/اعتماد خطط مدير الفرع (طلب إعادة هيكلة الاعتماد) ═══
+  // الفئة 1: المشرفون المختصون (مسمّى مشرف مختص = supervisor/specialist) — فني: المشرف التعليمي • نهائي: مدير الفرع
+  const catSpecialists = (users||[]).filter(u=>u.role==="supervisor" && u.roleSubtype==="specialist" && myBranches.includes(u.branch));
+  // الفئة 2: قيادات الفرع (مدير مرحلة + وكيل بجميع أنواعه + مساعد إداري=deputy) — فني: مدير المرحلة (للوكلاء والمساعد) • نهائي: مدير الفرع
+  const catLeaders = (users||[]).filter(u=>["stage_mgr","deputy"].includes(u.role) && myBranches.includes(u.branch));
+  // الفئة 3: الامتدادات الفنية في الفرع — فني: مدير إدارتهم الوظيفية • نهائي: مدير الفرع
+  const catExtensions = (users||[]).filter(u=>u.role==="branch_ext" && myBranches.includes(u.branch));
   const brStagePairs = [];
   myBranches.forEach(br=>{
   const st2 = [...new Set(branchEmps.filter(u=>u.branch===br).map(u=>u.stage).filter(Boolean))].sort();
@@ -3255,6 +3263,45 @@ function BranchManagerPanel({ user, onLogout }) {
   showToast(approve?`✅ اعتماد نهائي (${cost.toLocaleString("en-US")} ريال)`:"↩ أُلغي الاعتماد النهائي");
   };
 
+  // ═══ عرض بطاقة قيادي/فئة (للاطّلاع في تبويب المتابعة) ═══
+  const renderCatMemberCard = (u)=>{
+   const plan=idps[u.id]||{}; const rows=plan.plan||[]; const ap=plan.approved;
+   const sub=u.roleSubtype&&ROLE_SUBTYPES[u.role]?ROLE_SUBTYPES[u.role][u.roleSubtype]:"";
+   return(
+   <details key={u.id} style={{background:"#fff",border:`1px solid ${ap?"#10B98125":"#E3EEF9"}`,borderRadius:14,marginBottom:8,overflow:"hidden"}}>
+   <summary style={{padding:"11px 14px",cursor:"pointer",display:"flex",alignItems:"center",gap:12,listStyle:"none"}}>
+   <div style={{width:32,height:32,borderRadius:9,background:ap?"#10B98115":"#F4F9FE",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>{ap?"✅":"🎯"}</div>
+   <div style={{flex:1,minWidth:0}}><div style={{fontWeight:700,fontSize:12,color:"#15385C"}}>{u.name}</div><div style={{fontSize:10,color:"#8CA3BD"}}>{ROLES_LIST[u.role]}{sub?` • ${sub}`:""}{u.stage?` • ${u.stage}`:""} • {rows.length} بند</div></div>
+   <span style={{fontSize:10,color:ap?"#10B981":"#F59E0B",background:ap?"#10B98115":"#F59E0B15",padding:"3px 10px",borderRadius:20,fontWeight:700}}>{ap?"معتمدة":plan.isFinal?"بانتظار الاعتماد":"مسودّة"}</span>
+   <button onClick={(e)=>{e.preventDefault();setViewPlanUser(u);}} style={{padding:"5px 12px",borderRadius:8,border:"1px solid #8B5CF640",background:"#8B5CF610",color:"#7C3AED",fontSize:11,cursor:"pointer",fontWeight:700}}>👁️ عرض الخطة</button>
+   </summary>
+   <div style={{padding:"0 14px 12px",borderTop:"1px solid #EEF4FB"}}>
+   {rows.length===0?<div style={{textAlign:"center",padding:14,color:"#8CA3BD",fontSize:12}}>لا خطة بعد</div>:rows.map((r,i)=>{
+   const sc=statusColor[r.status]||"#8CA3BD";
+   return(<div key={r.id} style={{background:"#F4F9FE",border:`1px solid ${sc}25`,borderRadius:10,padding:"9px 12px",marginTop:8}}>
+   <div style={{display:"flex",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}>
+   <div style={{flex:1,minWidth:0,fontSize:12,color:"#15385C",fontWeight:700}}>{r.cat?`[${r.cat}] `:""}{r.programName||r.comp||`بند ${i+1}`}</div>
+   <span style={{fontSize:10,color:sc,background:`${sc}15`,padding:"3px 10px",borderRadius:20,fontWeight:700}}>{r.status||"لم يتم"}</span>
+   </div>
+   </div>);
+   })}
+   </div>
+   </details>
+   );
+  };
+  // ═══ قسم فئة كامل (عنوان + شرح سلسلة الاعتماد + ملاحظة الإطّلاع الدائم + البطاقات) ═══
+  const renderCatSection = (list, title, chainNote, accent)=>{
+   if(!list.length) return null;
+   return(
+   <div style={{background:`${accent}08`,border:`1px solid ${accent}25`,borderRadius:20,marginTop:14,marginBottom:8,padding:18}}>
+   <div style={{fontSize:15,fontWeight:900,color:accent,marginBottom:4}}>{title} ({list.length})</div>
+   <div style={{fontSize:11,color:"#8CA3BD",marginBottom:6}}>{chainNote}</div>
+   <div style={{fontSize:10,color:accent,background:"#fff",border:`1px dashed ${accent}40`,borderRadius:10,padding:"7px 11px",marginBottom:12,lineHeight:1.6}}>ℹ️ يبقى جميع الأطراف المشاركون مطّلعين على الخطط في كل الأوقات: قبل الاعتماد وبعده، وأثناء التنفيذ وقياس الأثر.</div>
+   {list.map(u=>renderCatMemberCard(u))}
+   </div>
+   );
+  };
+
   return (
   <div style={{minHeight:"100vh",background:APP_BG,fontFamily:"'El Messiri',sans-serif",direction:"rtl",color:"#1E293B"}}>
    {toast&&<div style={{position:"fixed",top:18,left:"50%",transform:"translateX(-50%)",background:toast.c,color:"#fff",padding:"11px 26px",borderRadius:30,fontWeight:700,fontSize:13,zIndex:9999,boxShadow:`0 8px 28px ${toast.c}55`}}>{toast.msg}</div>}
@@ -3289,36 +3336,12 @@ function BranchManagerPanel({ user, onLogout }) {
    <div style={{marginTop:20}}>
    <LeaderPlanApprovals user={user} users={users} idps={idps} impactData={impactData} readings={readings}
    onApprovePlan={approveLeaderPlan} onOpenCard={(t)=>setViewPlanUser(t)}/></div>
-   {/* قيادات الفرع: متابعة خطط التطور لمدراء المراحل والوكلاء (منفصلين عن الموظفين) */}
-   {branchLeaders.length>0&&(
-   <div style={{background:"#8B5CF608",border:"1px solid #8B5CF625",borderRadius:20,marginTop:14,marginBottom:8,padding:18}}>
-   <div style={{fontSize:15,fontWeight:900,color:"#7C3AED",marginBottom:4}}>🏛️ قيادات الفرع — متابعة التطور المهني</div>
-   <div style={{fontSize:11,color:"#8CA3BD",marginBottom:12}}>مدراء المراحل والوكلاء ({branchLeaders.length}) — للاطّلاع على خططهم.</div>
-   {branchLeaders.map(u=>{
-   const plan=idps[u.id]||{}; const rows=plan.plan||[]; const ap=plan.approved;
-   return(
-   <details key={u.id} style={{background:"#fff",border:`1px solid ${ap?"#10B98125":"#E3EEF9"}`,borderRadius:14,marginBottom:8,overflow:"hidden"}}>
-   <summary style={{padding:"11px 14px",cursor:"pointer",display:"flex",alignItems:"center",gap:12,listStyle:"none"}}>
-   <div style={{width:32,height:32,borderRadius:9,background:ap?"#10B98115":"#F4F9FE",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>{ap?"✅":"🎯"}</div>
-   <div style={{flex:1,minWidth:0}}><div style={{fontWeight:700,fontSize:12,color:"#15385C"}}>{u.name}</div><div style={{fontSize:10,color:"#8CA3BD"}}>{ROLES_LIST[u.role]}{u.stage?` • ${u.stage}`:""} • {rows.length} بند</div></div>
-   <span style={{fontSize:10,color:ap?"#10B981":"#F59E0B",background:ap?"#10B98115":"#F59E0B15",padding:"3px 10px",borderRadius:20,fontWeight:700}}>{ap?"معتمدة":plan.isFinal?"بانتظار الاعتماد":"مسودّة"}</span>
-   <button onClick={(e)=>{e.preventDefault();setViewPlanUser(u);}} style={{padding:"5px 12px",borderRadius:8,border:"1px solid #8B5CF640",background:"#8B5CF610",color:"#7C3AED",fontSize:11,cursor:"pointer",fontWeight:700}}>👁️ عرض الخطة</button>
-   </summary>
-   <div style={{padding:"0 14px 12px",borderTop:"1px solid #EEF4FB"}}>
-   {rows.length===0?<div style={{textAlign:"center",padding:14,color:"#8CA3BD",fontSize:12}}>لا خطة بعد</div>:rows.map((r,i)=>{
-   const sc=statusColor[r.status]||"#8CA3BD";
-   return(<div key={r.id} style={{background:"#F4F9FE",border:`1px solid ${sc}25`,borderRadius:10,padding:"9px 12px",marginTop:8}}>
-   <div style={{display:"flex",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}>
-   <div style={{flex:1,minWidth:0,fontSize:12,color:"#15385C",fontWeight:700}}>{r.cat?`[${r.cat}] `:""}{r.programName||r.comp||`بند ${i+1}`}</div>
-   <span style={{fontSize:10,color:sc,background:`${sc}15`,padding:"3px 10px",borderRadius:20,fontWeight:700}}>{r.status||"لم يتم"}</span>
-   </div></div>);
-   })}
-   </div>
-   </details>
-   );
-   })}
-   </div>
-   )}
+   {/* ═══ الفئات الثلاث — متابعة التطور المهني (للاطّلاع) ═══ */}
+   {renderCatSection(catSpecialists, "🔍 المشرفون المختصون — متابعة التطور المهني", "اعتماد فني: المشرف التعليمي • اعتماد نهائي: مدير الفرع", "#2563EB")}
+   {renderCatSection(catLeaders, "🏛️ قيادات الفرع — متابعة التطور المهني", "مدراء المراحل والوكلاء والمساعدون الإداريون • اعتماد فني: مدير المرحلة (للوكلاء والمساعدين) • نهائي: مدير الفرع • مدير المرحلة: نهائي من مدير الفرع", "#7C3AED")}
+   {renderCatSection(catExtensions, "🔗 الامتدادات الفنية في الفرع — متابعة التطور المهني", "اعتماد فني: مدير الإدارة الوظيفية • اعتماد نهائي: مدير الفرع", "#0891B2")}
+   {/* قياس الأثر: مدير الفرع هو المدير المباشر لمدراء المراحل (لا متابع فني لهم) */}
+   <ImpactFollowerSection user={user} users={users} idps={idps} impactData={impactData} onSaveImpact={saveImpact} excludeRoles={["employee"]}/>
    <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",marginTop:14}}>
    {[{l:"👥 الموظفون",v:branchEmps.length,c:"#2E7FB8"},{l:"📋 خطط معتمدة فنياً",v:`${growthStats.approved}/${growthStats.plans}`,c:"#10B981"},{l:"⏱️ الساعات",v:growthStats.hours%1===0?growthStats.hours:growthStats.hours.toFixed(1),c:"#0891B2"},{l:"💰 التكلفة",v:growthStats.cost>0?growthStats.cost.toLocaleString("en-US"):"0",c:"#D97706"},{l:"📊 نسبة التنفيذ",v:`${growthStats.execPct}%`,c:"#059669"},{l:"📏 قياس الأثر",v:`${growthStats.impactPct}%`,c:"#8B5CF6"}].map((card,i)=>(
   <div key={i} style={{flex:1,minWidth:110,background:BRAND.cardBg,border:`1px solid ${BRAND.cardBorder}`,borderRadius:20,padding:"16px 18px",boxShadow:"0 8px 26px rgba(46,127,184,0.10)"}}>
@@ -3501,27 +3524,50 @@ function BranchManagerPanel({ user, onLogout }) {
     <div style={{background:"#fff",borderRadius:10,padding:"8px 14px",border:"1px solid #10B98120"}}><span style={{fontSize:10,color:"#8CA3BD"}}>المعتمَد: </span><span style={{fontSize:14,fontWeight:900,color:"#059669",fontFamily:MONO}}>{usedBranch.toLocaleString("en-US")}</span></div>
     <div style={{background:"#fff",borderRadius:10,padding:"8px 14px",border:"1px solid #2E7FB820"}}><span style={{fontSize:10,color:"#8CA3BD"}}>المتبقّي: </span><span style={{fontSize:14,fontWeight:900,color:"#2E7FB8",fontFamily:MONO}}>{(branchCap-usedBranch).toLocaleString("en-US")}</span></div>
     </div>
-    <div style={{fontSize:10,color:"#8CA3BD",marginBottom:12,lineHeight:1.7}}>يظهر هنا من اكتمل اعتمادهم الفني (والمالي من مدير المرحلة للمعلمين/الإداريين). يمكنك اعتماد ما تجاوز سقف مدير المرحلة، والقيادات والمتابعين الفنيين يُعتمدون هنا مباشرة.</div>
-    {finalCandidates.map(u=>{
-     const idp=idps[u.id]||{}; const cost=planCost(idp); const done=idp.branchFinanceApproved;
-     const stageFin=idp.financeApproved; const isLeaderOrExt=!underStageFinance(u);
-     const wouldExceed=!done&&(usedBranch+cost>branchCap);
-     return(
-     <div key={u.id} style={{background:"#fff",border:`1px solid ${done?"#10B98130":"#E3EEF9"}`,borderRadius:12,padding:"11px 14px",marginBottom:7,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-     <div style={{flex:1,minWidth:140}}>
-     <div style={{fontWeight:700,fontSize:12,color:"#15385C"}}>{u.name}</div>
-     <div style={{fontSize:10,color:"#8CA3BD"}}>{ROLES_LIST[u.role]}{u.stage?` • ${u.stage}`:""} • {(idp.plan||[]).length} بند
-     {stageFin&&<span style={{color:"#059669",marginRight:6}}>✓ مالي (مرحلة)</span>}
-     {isLeaderOrExt&&<span style={{color:"#7C3AED",marginRight:6}}>قيادي/فني</span>}
-     </div>
-     </div>
-     <div style={{textAlign:"center"}}><div style={{fontSize:9,color:"#8CA3BD"}}>التكلفة</div><div style={{fontSize:15,fontWeight:900,color:"#6D28D9",fontFamily:MONO}}>{cost.toLocaleString("en-US")}</div></div>
-     {done
-      ? <button onClick={()=>approveBranchFinance(u.id,false)} style={{padding:"7px 13px",borderRadius:8,border:"1px solid #EF444430",background:"#EF444410",color:"#EF4444",fontSize:11,cursor:"pointer",fontWeight:700}}>↩ إلغاء</button>
-      : <button onClick={()=>approveBranchFinance(u.id,true)} disabled={wouldExceed} title={wouldExceed?"يتجاوز سقف الفرع":""} style={{padding:"7px 13px",borderRadius:8,border:"none",background:wouldExceed?"#CBD5E1":"linear-gradient(135deg,#6D28D9,#8B5CF6)",color:"#fff",fontSize:11,cursor:wouldExceed?"not-allowed":"pointer",fontWeight:700}}>{wouldExceed?"🔒 يتجاوز السقف":"✅ اعتماد نهائي"}</button>}
-     </div>
-     );
-    })}
+    <div style={{fontSize:10,color:"#8CA3BD",marginBottom:12,lineHeight:1.7}}>يظهر هنا من اكتمل اعتمادهم الفني (والمالي من مدير المرحلة للمعلمين/الإداريين). القوائم مُصنّفة إلى الفئات الثلاث؛ اعتمادك هنا هو الاعتماد النهائي لكل فئة.</div>
+    {(()=>{
+     // بطاقة اعتماد نهائي لمرشّح واحد (نفس منطق الاعتماد تماماً)
+     const renderFinalCard = (u)=>{
+      const idp=idps[u.id]||{}; const cost=planCost(idp); const done=idp.branchFinanceApproved;
+      const stageFin=idp.financeApproved; const isLeaderOrExt=!underStageFinance(u);
+      const sub=u.roleSubtype&&ROLE_SUBTYPES[u.role]?ROLE_SUBTYPES[u.role][u.roleSubtype]:"";
+      const wouldExceed=!done&&(usedBranch+cost>branchCap);
+      return(
+      <div key={u.id} style={{background:"#fff",border:`1px solid ${done?"#10B98130":"#E3EEF9"}`,borderRadius:12,padding:"11px 14px",marginBottom:7,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+      <div style={{flex:1,minWidth:140}}>
+      <div style={{fontWeight:700,fontSize:12,color:"#15385C"}}>{u.name}</div>
+      <div style={{fontSize:10,color:"#8CA3BD"}}>{ROLES_LIST[u.role]}{sub?` • ${sub}`:""}{u.stage?` • ${u.stage}`:""} • {(idp.plan||[]).length} بند
+      {stageFin&&<span style={{color:"#059669",marginRight:6}}>✓ مالي (مرحلة)</span>}
+      {isLeaderOrExt&&<span style={{color:"#7C3AED",marginRight:6}}>✓ فني</span>}
+      </div>
+      </div>
+      <div style={{textAlign:"center"}}><div style={{fontSize:9,color:"#8CA3BD"}}>التكلفة</div><div style={{fontSize:15,fontWeight:900,color:"#6D28D9",fontFamily:MONO}}>{cost.toLocaleString("en-US")}</div></div>
+      {done
+       ? <button onClick={()=>approveBranchFinance(u.id,false)} style={{padding:"7px 13px",borderRadius:8,border:"1px solid #EF444430",background:"#EF444410",color:"#EF4444",fontSize:11,cursor:"pointer",fontWeight:700}}>↩ إلغاء</button>
+       : <button onClick={()=>approveBranchFinance(u.id,true)} disabled={wouldExceed} title={wouldExceed?"يتجاوز سقف الفرع":""} style={{padding:"7px 13px",borderRadius:8,border:"none",background:wouldExceed?"#CBD5E1":"linear-gradient(135deg,#6D28D9,#8B5CF6)",color:"#fff",fontSize:11,cursor:wouldExceed?"not-allowed":"pointer",fontWeight:700}}>{wouldExceed?"🔒 يتجاوز السقف":"✅ اعتماد نهائي"}</button>}
+      </div>
+      );
+     };
+     // تصنيف المرشّحين إلى الفئات الثلاث + المعلمون/الإداريون (خطط أفراد المراحل) في مجموعة رابعة
+     const inList=(u,list)=>list.some(x=>x.id===u.id);
+     const gSpecialists=finalCandidates.filter(u=>inList(u,catSpecialists));
+     const gLeaders=finalCandidates.filter(u=>inList(u,catLeaders));
+     const gExtensions=finalCandidates.filter(u=>inList(u,catExtensions));
+     const gStaff=finalCandidates.filter(u=>underStageFinance(u)); // معلم/إداري
+     const grp=(list,title,note,accent)=> list.length?(
+      <div style={{marginBottom:14}}>
+      <div style={{fontSize:12,fontWeight:900,color:accent,marginBottom:2}}>{title} ({list.length})</div>
+      <div style={{fontSize:9,color:"#8CA3BD",marginBottom:8}}>{note}</div>
+      {list.map(u=>renderFinalCard(u))}
+      </div>
+     ):null;
+     return(<>
+      {grp(gSpecialists,"🔍 المشرفون المختصون","اعتماد فني: المشرف التعليمي ✓ — الاعتماد النهائي بيدك","#2563EB")}
+      {grp(gLeaders,"🏛️ قيادات الفرع","مدير مرحلة/وكيل/مساعد إداري • اعتماد فني: مدير المرحلة (للوكلاء والمساعدين) — الاعتماد النهائي بيدك","#7C3AED")}
+      {grp(gExtensions,"🔗 الامتدادات الفنية","اعتماد فني: مدير الإدارة الوظيفية ✓ — الاعتماد النهائي بيدك","#0891B2")}
+      {grp(gStaff,"👥 المعلمون والإداريون","اعتماد فني: المتابع الفني ✓ • مالي: مدير المرحلة ✓ — الاعتماد النهائي بيدك","#059669")}
+     </>);
+    })()}
     </div>
     );
    })()}
@@ -5199,7 +5245,7 @@ function AdminPanel({ onLogout, assistant }) {
      "معلم":{role:"employee",roleSubtype:"teacher"}, "اداري":{role:"employee",roleSubtype:"admin_staff"}, "إداري":{role:"employee",roleSubtype:"admin_staff"},
      "معلم/اداري":{role:"employee",roleSubtype:"teacher"}, "معلم/إداري":{role:"employee",roleSubtype:"teacher"},
      "متابع فني":{role:"supervisor",roleSubtype:"specialist"}, "مشرف مختص":{role:"supervisor",roleSubtype:"specialist"},
-     "وكيل":{role:"deputy",roleSubtype:"general"}, "مدير مرحلة":{role:"stage_mgr",roleSubtype:""}, "مدير مباشر":{role:"stage_mgr",roleSubtype:""},
+     "وكيل":{role:"deputy",roleSubtype:"general"}, "مساعد إداري":{role:"deputy",roleSubtype:"general"}, "مساعد اداري":{role:"deputy",roleSubtype:"general"}, "مدير مرحلة":{role:"stage_mgr",roleSubtype:""}, "مدير مباشر":{role:"stage_mgr",roleSubtype:""},
      "مدير فرع":{role:"branch_mgr",roleSubtype:""}, "مدير عام فرع":{role:"branch_mgr",roleSubtype:""},
      "مشرف تعليمي":{role:"branch_ext",roleSubtype:"edu_excellence"},
    };
@@ -5207,7 +5253,7 @@ function AdminPanel({ onLogout, assistant }) {
    const emailToId = {}; (users||[]).forEach(u=>{ if(u.username) emailToId[norm(u.username).toLowerCase()]=u.id; });
    // v65: مسمّيات الجدارات المسجّلة (للتحقّق الصارم) + قائمة القيادات المقبولة
    const regJobs = {}; Object.keys(getActiveJobs()||{}).forEach(j=>{ regJobs[norm(j)]=j; });
-   const leaderJobs = {"متابع فني":1,"مشرف مختص":1,"وكيل":1,"مدير مرحلة":1,"مدير مباشر":1,"مدير فرع":1,"مدير عام فرع":1,"مشرف تعليمي":1};
+   const leaderJobs = {"متابع فني":1,"مشرف مختص":1,"وكيل":1,"مساعد إداري":1,"مساعد اداري":1,"مدير مرحلة":1,"مدير مباشر":1,"مدير فرع":1,"مدير عام فرع":1,"مشرف تعليمي":1};
    let ok=0, created=[], errors=[];
    const existing = new Set((users||[]).map(u=>u.username));
    for(let i=start;i<lines.length;i++){
@@ -5232,7 +5278,7 @@ function AdminPanel({ onLogout, assistant }) {
       else if(/متابع فني|مشرف مختص/.test(jobN)) rr={role:"supervisor",roleSubtype:"specialist"};
       else if(/مدير عام فرع|مدير فرع/.test(jobN)) rr={role:"branch_mgr",roleSubtype:""};
       else if(/مدير مرحلة|مدير مباشر/.test(jobN)) rr={role:"stage_mgr",roleSubtype:""};
-      else if(/وكيل/.test(jobN)) rr={role:"deputy",roleSubtype:"general"};
+      else if(/وكيل|مساعد إداري|مساعد اداري/.test(jobN)) rr={role:"deputy",roleSubtype:"general"};
       else if(/إداري|اداري/.test(jobN)) rr={role:"employee",roleSubtype:"admin_staff"};
       else rr={role:"employee",roleSubtype:"teacher"};
     }
@@ -6165,6 +6211,57 @@ function TeamEditRequestForm({ emp, rows, onSubmit, onCancel }) {
   );
 }
 
+// ═══ مكوّن قابل لإعادة الاستخدام: قياس الأثر للمتابع الفني (أو المدير المباشر عند غيابه) ═══
+// القاعدة المتّفق عليها: قياس الأثر دور المتابع الفني (supervisorId) لأيّ مسمّى وظيفي؛
+// فإن لم يوجد متابع فني لتلك الوظيفة يصبح المدير المباشر (stageManagerId) هو القائم بالدور فعليّاً.
+// excludeRoles: نستثني المسمّيات التي يُقاس أثرها أصلاً في لوحة أخرى (كالمعلم/الإداري لدى المشرف المختص).
+function ImpactFollowerSection({ user, users, idps, impactData, onSaveImpact, excludeRoles=[] }) {
+  const measurees = (users||[]).filter(u=>{
+   if (u.id===user.id) return false;
+   if (excludeRoles.includes(u.role)) return false;
+   const measurerId = u.supervisorId || u.stageManagerId || ""; // المتابع الفني وإلا المدير المباشر
+   return measurerId===user.id;
+  });
+  if (!measurees.length) return null;
+  const statusColor = { "تم التنفيذ":"#10B981", "جاري التنفيذ":"#F59E0B", "لم يتم التنفيذ":"#EF4444" };
+  return (
+  <div style={{background:"#0891B208",border:"1px solid #0891B225",borderRadius:20,marginTop:14,marginBottom:8,padding:18}}>
+   <div style={{fontSize:15,fontWeight:900,color:"#0E7490",marginBottom:4}}>📏 قياس الأثر — للتابعين لك ({measurees.length})</div>
+   <div style={{fontSize:11,color:"#8CA3BD",marginBottom:12}}>بصفتك المتابع الفني (أو المدير المباشر عند غياب متابع فني لهذه الوظيفة)، أنت المعني بقياس أثر بنود خططهم بعد اعتمادها.</div>
+   {measurees.map(u=>{
+    const plan=idps[u.id]||{}; const ap=plan.approved; const rows=plan.plan||[];
+    const sub=u.roleSubtype&&ROLE_SUBTYPES[u.role]?ROLE_SUBTYPES[u.role][u.roleSubtype]:"";
+    return(
+    <details key={u.id} style={{background:"#fff",border:"1px solid #E3EEF9",borderRadius:14,marginBottom:8,overflow:"hidden"}}>
+    <summary style={{padding:"11px 14px",cursor:"pointer",display:"flex",alignItems:"center",gap:12,listStyle:"none"}}>
+     <div style={{flex:1,minWidth:0}}><div style={{fontWeight:700,fontSize:12,color:"#15385C"}}>{u.name}</div><div style={{fontSize:10,color:"#8CA3BD"}}>{ROLES_LIST[u.role]}{sub?` • ${sub}`:""}{u.stage?` • ${u.stage}`:""} • {rows.length} بند</div></div>
+     <span style={{fontSize:10,color:ap?"#10B981":"#F59E0B",background:ap?"#10B98115":"#F59E0B15",padding:"3px 10px",borderRadius:20,fontWeight:700}}>{ap?"معتمدة":"غير معتمدة"}</span>
+    </summary>
+    <div style={{padding:"0 14px 12px",borderTop:"1px solid #EEF4FB"}}>
+     {!ap?<div style={{textAlign:"center",padding:14,color:"#8CA3BD",fontSize:12}}>يُقاس الأثر بعد اعتماد الخطة</div>
+      :rows.length===0?<div style={{textAlign:"center",padding:14,color:"#8CA3BD",fontSize:12}}>لا بنود في الخطة</div>
+      :rows.map((r,i)=>{
+       const sc=statusColor[r.status]||"#8CA3BD";
+       const _ms = `${r.trainMethod||""} ${r.sourceType||""} ${r.needSource||""} ${r.method||""} ${r.programName||""} ${r.comp||""}`;
+       const isInternalCourse = _ms.includes("حضورية داخلية")||_ms.includes("داخلي حضوري")||_ms.includes("التدريب الداخلي")||(_ms.includes("داخلي")&&_ms.includes("حضور"));
+       return(<div key={r.id} style={{background:"#F4F9FE",border:`1px solid ${sc}25`,borderRadius:10,padding:"9px 12px",marginTop:8}}>
+        <div style={{display:"flex",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}>
+         <div style={{flex:1,minWidth:0,fontSize:12,color:"#15385C",fontWeight:700}}>{r.cat?`[${r.cat}] `:""}{r.programName||r.comp||`بند ${i+1}`}{isInternalCourse&&<span style={{fontSize:9,color:"#8B5CF6",background:"#8B5CF612",padding:"1px 7px",borderRadius:10,marginRight:6,fontWeight:700}}>🏫 دورة داخلية</span>}</div>
+         <span style={{fontSize:10,color:sc,background:`${sc}15`,padding:"3px 10px",borderRadius:20,fontWeight:700}}>{r.status||"لم يتم"}</span>
+        </div>
+        {isInternalCourse
+         ? <div style={{fontSize:10,color:"#8B5CF6",marginTop:6}}>⏳ الدورات الداخلية يصل قياس أثرها من إدارة التدريب</div>
+         : <ImpactMeasure row={r} impact={impactData[`${u.id}__${r.id}`]} editable onSave={d=>onSaveImpact(u.id,r.id,d)} planApproved={!!ap} branchApproved={!!idps[u.id]?.branchFinanceApproved}/>}
+       </div>);
+      })}
+    </div>
+    </details>
+    );
+   })}
+  </div>
+  );
+}
+
 // مكوّن قابل لإعادة الاستخدام: اعتماد خطط القياديين التابعين (د-7)
 // يعرض من يعتمد المستخدمُ الحاليُّ خططَهم (عبر getPlanApprover) مع عرض/اعتماد.
 function LeaderPlanApprovals({ user, users, idps, impactData, readings, onApprovePlan, onOpenCard }) {
@@ -6379,6 +6476,7 @@ function StageManagerPanel({ user, onLogout }) {
   setIdpsState(ni); await st.set("idps_360c",ni);
   showToast(approve?"✅ اعتُمدت خطة القيادي":"↩ أُلغي الاعتماد");
   };
+  const saveImpact = async (empId,rowId,data) => { const ni={...impactData,[`${empId}__${rowId}`]:data}; setImpactData(ni); await st.set("impact_360c",ni); showToast("✓ حُفظ قياس الأثر"); };
 
   // الاعتماد المالي (مدير المرحلة) — ضمن سقفه؛ يعتمد تكلفة خطة الموظف كاملةً أو يرفض
   const approveFinance = async (targetId, approve) => {
@@ -6442,6 +6540,8 @@ function StageManagerPanel({ user, onLogout }) {
   <AnalyticsDashboard scope={myTargets} evals={evals} idps={idps} impactData={impactData} unitLabel="مرحلة" getUnit={(u)=>u.stage||"—"} fixedMode="growth"/>
   <div style={{marginTop:20}}><LeaderPlanApprovals user={user} users={users} idps={idps} impactData={impactData} readings={readings}
    onApprovePlan={approveLeaderPlan} onOpenCard={(t)=>setViewTarget(t)}/></div>
+  {/* قياس الأثر: مدير المرحلة هو المتابع الفني للوكلاء والمساعدين الإداريين في مرحلته */}
+  <ImpactFollowerSection user={user} users={users} idps={idps} impactData={impactData} onSaveImpact={saveImpact} excludeRoles={["employee"]}/>
   </>
   )}
   {tab==="growth"&&myTargets.length>0&&(
@@ -7799,7 +7899,7 @@ function ExecPanel({ user, onLogout }) {
 
 // ملاحظة 9: تبويبات متابعة مدير الإدارة (أخصائيو إدارته + الامتدادات الفنية)
 // يعتمد خططهم، ويقيّمهم: الأخصائي كمدير مباشر، والامتداد كمتابع فني.
-function DeptManagerTeam({ user, users, evals, idps, readings, impactData, locks, setLocks, onApprovePlan, onSaveEval, onOpenCard, showToast }) {
+function DeptManagerTeam({ user, users, evals, idps, readings, impactData, locks, setLocks, onApprovePlan, onSaveEval, onSaveImpact, onOpenCard, showToast }) {
   const [sub,setSub] = useState("growth"); // growth | eval
   const [evalTarget,setEvalTarget] = useState(null);
   // تابعو الإدارة: أخصائيون + امتدادات فنية بنفس النوع الفرعي
@@ -7825,6 +7925,8 @@ function DeptManagerTeam({ user, users, evals, idps, readings, impactData, locks
    <div>
    <LeaderPlanApprovals user={user} users={users} idps={idps} impactData={impactData} readings={readings}
     onApprovePlan={onApprovePlan} onOpenCard={onOpenCard}/>
+   {/* قياس الأثر: مدير الإدارة الوظيفية هو المتابع الفني للامتدادات الفنية (والمدير المباشر للأخصائيين) */}
+   <ImpactFollowerSection user={user} users={users} idps={idps} impactData={impactData} onSaveImpact={onSaveImpact} excludeRoles={["employee"]}/>
    {/* قائمة الفريق مع حالة الخطة */}
    {[{list:specialists,label:"👤 أخصائيو الإدارة"},{list:extensions,label:"🔗 الامتدادات الفنية في الفروع"}].map(grp=>grp.list.length>0&&(
    <div key={grp.label} style={{marginTop:14}}>
@@ -8334,7 +8436,7 @@ function EmployeePanel({ user, onLogout }) {
   {/* ملاحظة 9: متابعة فريق مدير الإدارة */}
   {empTab==="team"&&isDeptMgr&&(
   <DeptManagerTeam user={user} users={users} evals={evals} idps={idps} readings={readings} impactData={impactData}
-   locks={locks} setLocks={setLocks} onApprovePlan={approveTeamPlan} onSaveEval={saveTeamEval}
+   locks={locks} setLocks={setLocks} onApprovePlan={approveTeamPlan} onSaveEval={saveTeamEval} onSaveImpact={saveImpactEdu}
    onOpenCard={(u)=>{ setTeamCardTarget(u); }} showToast={showToast}/>
   )}
 

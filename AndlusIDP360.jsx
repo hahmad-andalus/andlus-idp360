@@ -1262,8 +1262,11 @@ function getEmpFullStats(u, evals) {
   const empEval = evals[u.id]||{};
   const comps = getActiveJobs()[u.job]||[];
   const partyCompletion = {};
+  // v80: الفئات المتوقّعة لكل طرف تُشتقّ من نموذج مصفوفة الأوزان للامتدادات/الأخصائيين (فنية فقط للامتداد مثلاً)
+  const _um = EVAL_MODELS[getEvalModel(u)];
+  const _useModel = ["branch_ext","specialist"].includes(getEvalModel(u)) && _um;
   EVAL_PARTIES.forEach(p=>{
-  const ac=PARTY_CATS[p.key]||[];
+  const ac=(_useModel && _um.parties[p.key]) ? _um.parties[p.key].cats : (PARTY_CATS[p.key]||[]);
   const mc=comps.filter(c=>ac.includes(getCat(c)));
   const ti=mc.reduce((s,c)=>(getActiveComps()[c]?.items?.length||0)+s,0);
   const si=mc.reduce((s,c)=>{const it=getActiveComps()[c]?.items||[];return s+it.filter((_,i)=>(empEval?.[p.key]?.[c]?.[i]||0)>0).length;},0);
@@ -1835,7 +1838,11 @@ function RoleEvalForm({ party, targetUser, existingScores, onSave, onCancel }) {
 
 function EvalForm({ partyKey, targetUser, existingScores, onSave, onCancel, locks, onLock, lockKeyOverride }) {
   const party = EVAL_PARTIES.find(p=>p.key===partyKey);
-  const allowedCats = PARTY_CATS[partyKey] || [];
+  // v80: للامتدادات الفنية والأخصائيين (الإدارات الوظيفية) تُشتقّ الفئات المسموحة من نموذج مصفوفة الأوزان
+  // (الفئات ذات الوزن>0 لهذا الطرف) بدل PARTY_CATS المسطّح — ليقيّم مدير الإدارة الامتدادَ على الفنية فقط مثلاً.
+  const _model = EVAL_MODELS[getEvalModel(targetUser)];
+  const _useModelCats = ["branch_ext","specialist"].includes(getEvalModel(targetUser)) && _model && _model.parties[partyKey];
+  const allowedCats = _useModelCats ? _model.parties[partyKey].cats : (PARTY_CATS[partyKey] || []);
   const comps = (getActiveJobs()[targetUser.job]||[]).filter(c => allowedCats.includes(getCat(c)));
   const [scores,setScores] = useState(existingScores||{});
   const [witnesses,setWitnesses] = useState(existingScores?.__witnesses||{});
@@ -2450,6 +2457,10 @@ function Card360({ targetUser, empEval, onSaveIdp, idpData, onClose, readings, o
   const deleteIdpRow = (id) => setIdpPlan(p=>p.filter(r=>r.id!==id));
 
   const comps = getActiveJobs()[targetUser.job]||[];
+  // v80: الفئات التي يقيّمها طرفٌ معيّن لهذا الموظف — من نموذج مصفوفة الأوزان للامتدادات/الأخصائيين، وإلا PARTY_CATS
+  const _cardModel = EVAL_MODELS[getEvalModel(targetUser)];
+  const _cardUseModel = ["branch_ext","specialist"].includes(getEvalModel(targetUser)) && _cardModel;
+  const catsForParty = (pk)=> (_cardUseModel && _cardModel.parties[pk]) ? _cardModel.parties[pk].cats : (PARTY_CATS[pk]||[]);
 
   const branchItemAvg = useMemo(()=>{
   if (!allEvals || !allUsers) return {};
@@ -2485,7 +2496,7 @@ function Card360({ targetUser, empEval, onSaveIdp, idpData, onClose, readings, o
   },[comps,empEval]);
 
   const partyStatus = cardParties.map(p=>{
-  const allowedCats = PARTY_CATS[p.key]||[];
+  const allowedCats = catsForParty(p.key);
   const myComps = comps.filter(c=>allowedCats.includes(getCat(c)));
   const totalItems = myComps.reduce((s,c)=>(getActiveComps()[c]?.items?.length||0)+s,0);
   const scoredItems = myComps.reduce((s,c)=>{
@@ -2635,13 +2646,14 @@ function Card360({ targetUser, empEval, onSaveIdp, idpData, onClose, readings, o
    {isOpen&&(
    <div style={{padding:"0 14px 14px",borderTop:`1px solid ${col}10`}}>
    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
-   {EVAL_PARTIES.filter(p=>PARTY_CATS[p.key].includes(cat)).map(p=>{
+   {EVAL_PARTIES.filter(p=>catsForParty(p.key).includes(cat)).map(p=>{
   const ps = calcCompScore(c, empEval?.[p.key]?.[c]);
+  const _cw = _cardUseModel && _cardModel.parties[p.key]?.catWeights ? _cardModel.parties[p.key].catWeights[cat] : PARTY_CAT_WEIGHTS[p.key][cat];
   return ps!==null?(
   <div key={p.key} style={{background:`${p.color}12`,borderRadius:7,padding:"4px 10px",display:"flex",gap:5,alignItems:"center"}}>
   <span style={{fontSize:10,color:p.color}}>{p.icon} {p.label}:</span>
   <span style={{fontSize:11,fontWeight:700,color:p.color,fontFamily:MONO}}>{ps.toFixed(2)}</span>
-  <span style={{fontSize:9,color:"#5B7A9E"}}>({PARTY_CAT_WEIGHTS[p.key][cat]}%)</span>
+  <span style={{fontSize:9,color:"#5B7A9E"}}>({_cw}%)</span>
   </div>
   ):null;
    })}
@@ -2652,7 +2664,7 @@ function Card360({ targetUser, empEval, onSaveIdp, idpData, onClose, readings, o
    <div key={idx} style={{background:"#FFFFFF",borderRadius:7,padding:"8px 12px",marginBottom:4}}>
   <div style={{fontSize:11,color:"#5B7A9E",marginBottom:5}}>{idx+1}. {item}</div>
   <div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center"}}>
-  {EVAL_PARTIES.filter(p=>PARTY_CATS[p.key].includes(cat)).map(p=>{
+  {EVAL_PARTIES.filter(p=>catsForParty(p.key).includes(cat)).map(p=>{
   const s = empEval?.[p.key]?.[c]?.[idx]||0;
   return s>0?(
   <div key={p.key} style={{display:"flex",alignItems:"center",gap:4,background:`${p.color}10`,borderRadius:5,padding:"2px 8px"}}>
@@ -3503,6 +3515,7 @@ function BranchManagerPanel({ user, onLogout }) {
     // الخطط الجاهزة للاعتماد النهائي: معتمدة فنياً + (معتمدة ماليّاً من مدير المرحلة أو تجاوزت سقفه)
     const branches = (user.branches&&user.branches.length)?user.branches:(user.branch?[user.branch]:[]);
     const finalCandidates = (users||[]).filter(u=>{
+     if(u.role==="specialist") return false;                     // v81: أخصائي الإدارة يعتمده مدير الإدارة نهائيّاً (لا مدير الفرع)
      if(!branches.includes(u.branch)) return false;
      const idp=idps[u.id]; if(!idp?.approved) return false;      // لا بدّ من الاعتماد الفني أولاً
      if(planCost(idp)<=0) return false;
@@ -7899,7 +7912,7 @@ function ExecPanel({ user, onLogout }) {
 
 // ملاحظة 9: تبويبات متابعة مدير الإدارة (أخصائيو إدارته + الامتدادات الفنية)
 // يعتمد خططهم، ويقيّمهم: الأخصائي كمدير مباشر، والامتداد كمتابع فني.
-function DeptManagerTeam({ user, users, evals, idps, readings, impactData, locks, setLocks, onApprovePlan, onSaveEval, onSaveImpact, onOpenCard, showToast }) {
+function DeptManagerTeam({ user, users, evals, idps, readings, impactData, locks, setLocks, onApprovePlan, onSaveEval, onSaveImpact, editRequests={}, approvals={}, onSaveIdp, onRequestEdit, onOpenPlan, onOpenCard, showToast }) {
   const [sub,setSub] = useState("growth"); // growth | eval
   const [evalTarget,setEvalTarget] = useState(null);
   // تابعو الإدارة: أخصائيون + امتدادات فنية بنفس النوع الفرعي
@@ -7923,29 +7936,28 @@ function DeptManagerTeam({ user, users, evals, idps, readings, impactData, locks
 
    {sub==="growth"&&team.length>0&&(
    <div>
-   <LeaderPlanApprovals user={user} users={users} idps={idps} impactData={impactData} readings={readings}
-    onApprovePlan={onApprovePlan} onOpenCard={onOpenCard}/>
-   {/* قياس الأثر: مدير الإدارة الوظيفية هو المتابع الفني للامتدادات الفنية (والمدير المباشر للأخصائيين) */}
-   <ImpactFollowerSection user={user} users={users} idps={idps} impactData={impactData} onSaveImpact={onSaveImpact} excludeRoles={["employee"]}/>
-   {/* قائمة الفريق مع حالة الخطة */}
-   {[{list:specialists,label:"👤 أخصائيو الإدارة"},{list:extensions,label:"🔗 الامتدادات الفنية في الفروع"}].map(grp=>grp.list.length>0&&(
-   <div key={grp.label} style={{marginTop:14}}>
-   <div style={{fontSize:13,fontWeight:800,color:"#5B7A9E",marginBottom:8}}>{grp.label} ({grp.list.length})</div>
-   {grp.list.map(u=>{
-   const idp = idps[u.id]; const approved = idp?.approved;
-   return (
-   <div key={u.id} style={{background:"#fff",border:"1px solid #DDE9F5",borderRadius:10,padding:"10px 14px",display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
-   <div style={{flex:1}}>
-   <div style={{fontWeight:700,fontSize:12,color:"#1E293B"}}>{u.name}</div>
-   <div style={{fontSize:10,color:"#5B7A9E"}}>{u.job||ROLES_LIST[u.role]}{u.branch?` • ${u.branch}`:""}</div>
+   {/* الامتدادات الفنية: أنت متابعهم الفني — عرض الخطة واعتمادها فنيّاً وطلب إعادة تخطيط وإبداء الملاحظات */}
+   {extensions.length>0&&(
+   <div style={{marginBottom:18}}>
+   <div style={{fontSize:13,fontWeight:900,color:"#0891B2",marginBottom:8}}>🔗 الامتدادات الفنية — الاعتماد الفني لخطط التطوّر</div>
+   <SupervisorTeamGrowth
+    myTargets={extensions} idps={idps} evals={evals} editRequests={editRequests} approvals={approvals} impactData={impactData} onSaveImpact={onSaveImpact}
+    user={user} onApprove={onSaveIdp} onSaveIdp={onSaveIdp} onRequestEdit={onRequestEdit} onOpenPlan={onOpenPlan}/>
    </div>
-   {idp?.plan?.length>0&&<span style={{fontSize:10,color:approved?"#059669":"#F59E0B",background:approved?"#10B98112":"#F59E0B12",padding:"3px 8px",borderRadius:20}}>{approved?"خطة معتمدة":"بانتظار الاعتماد"}</span>}
-   <button onClick={()=>onOpenCard(u)} style={{padding:"6px 12px",borderRadius:8,border:"1px solid #3B82F630",background:"#3B82F612",color:"#3B82F6",fontSize:11,cursor:"pointer",fontWeight:700}}>عرض</button>
+   )}
+   {/* أخصائيو الإدارة: أنت مديرهم المباشر — اعتمادك نهائي (مرحلة واحدة، لا مرحلة نهائية عند مدير الفرع) */}
+   {specialists.length>0&&(
+   <div style={{marginBottom:18}}>
+   <div style={{fontSize:13,fontWeight:900,color:"#7C3AED",marginBottom:8}}>👤 أخصائيو الإدارة — الاعتماد النهائي لخطط التطوّر</div>
+   <SupervisorTeamGrowth
+    myTargets={specialists} idps={idps} evals={evals} editRequests={editRequests} approvals={approvals} impactData={impactData} onSaveImpact={onSaveImpact}
+    user={user}
+    onApprove={(id,d)=> onSaveIdp(id, d.approved
+      ? {...d, branchFinanceApproved:true, branchFinanceApprovedBy:user.name, branchFinanceApprovedAt:new Date().toISOString().split("T")[0], finalApproved:true}
+      : {...d, branchFinanceApproved:false, branchFinanceApprovedBy:undefined, branchFinanceApprovedAt:undefined, finalApproved:false})}
+    onSaveIdp={onSaveIdp} onRequestEdit={onRequestEdit} onOpenPlan={onOpenPlan}/>
    </div>
-   );
-   })}
-   </div>
-   ))}
+   )}
    </div>
    )}
 
@@ -8437,6 +8449,7 @@ function EmployeePanel({ user, onLogout }) {
   {empTab==="team"&&isDeptMgr&&(
   <DeptManagerTeam user={user} users={users} evals={evals} idps={idps} readings={readings} impactData={impactData}
    locks={locks} setLocks={setLocks} onApprovePlan={approveTeamPlan} onSaveEval={saveTeamEval} onSaveImpact={saveImpactEdu}
+   editRequests={editRequests} approvals={approvals} onSaveIdp={saveEduTeamIdp} onRequestEdit={requestEditEdu} onOpenPlan={setEduPlanTarget}
    onOpenCard={(u)=>{ setTeamCardTarget(u); }} showToast={showToast}/>
   )}
 

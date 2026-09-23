@@ -137,7 +137,8 @@ const exportModelWeights = () => {
 // يحدّد نموذج التقييم حسب دور الموظف
 const getEvalModel = (roleOrUser) => {
   // يقبل إمّا سلسلة الدور أو كائن المستخدم (لتمييز المتابع الفني حسب نوعه الفرعي)
-  const role = typeof roleOrUser === "string" ? roleOrUser : roleOrUser?.role;
+  // v82: للكائن، الدور المعتمَد للنموذج من المسمّى الوظيفي (المسمّى يحكم) — فالوكيل ذو صلاحية متابع يُقيَّم كوكيل
+  const role = typeof roleOrUser === "string" ? roleOrUser : catRoleOf(roleOrUser);
   const subtype = typeof roleOrUser === "object" ? roleOrUser?.roleSubtype : null;
   if (role === "employee") return "employee";
   if (role === "branch_ext") return "branch_ext";
@@ -219,6 +220,30 @@ const branchMgrCap = (mgr, allUsers)=>{
 };
 function isAdminStaff(u){ return u.role==="employee" && (u.roleSubtype==="admin_staff" || /إداري|موجه|مراقب|رائد|قبول/.test(u.job||"")); }
 
+// ═══ الدور المستنتَج من المسمّى الوظيفي (v82: «المسمّى يحكم كل شيء») ═══
+// الصلاحية (u.role) تبقى تحكم لوحة الوصول وقدرة المتابعة/التقييم للتابعين فقط.
+// أمّا التصنيف والاعتماد ونموذج التقييم فبالمسمّى الوظيفي: فالوكيل ذو صلاحية «متابع فني» يبقى وكيلاً في الظهور والاعتماد.
+const roleFromJobTitle = (u) => {
+  if (!u) return null;
+  // v82.1: للمتابع الفني، «نوع المتابع» (supervisorType) إشارة موثوقة للمسمّى حتى لو كان حقل المسمّى فارغاً:
+  //   نوع «وكيل» ⇒ يُعامَل كوكيل (deputy)، ونوع «مشرف مختص» ⇒ مشرف مختص (supervisor).
+  if (u.role === "supervisor" && u.supervisorType) {
+    if (/وكيل|مساعد/.test(u.supervisorType)) return "deputy";
+    if (/مشرف مختص|مختص/.test(u.supervisorType)) return "supervisor";
+  }
+  const j = u.job ? String(u.job) : "";
+  if (!j) return null;
+  if (/مشرف تعليمي/.test(j)) return "branch_ext";           // امتداد فني تعليمي
+  if (/مشرف مختص/.test(j)) return "supervisor";             // مشرف مختص (يتبع المشرف التعليمي)
+  if (/مدير عام فرع|مدير فرع/.test(j)) return "branch_mgr";
+  if (/مدير مرحلة|مدير مباشر/.test(j)) return "stage_mgr";
+  if (/مساعد إداري|مساعد اداري|وكيل/.test(j)) return "deputy"; // كوكيل: مدير المرحلة ← مدير الفرع
+  if (/معلم|إداري|اداري/.test(j)) return "employee";
+  return null;                                               // مسمّى غير معروف → نرجع للصلاحية
+};
+// الدور المعتمَد للتصنيف/الاعتماد/نموذج التقييم: من المسمّى إن عُرف، وإلا الصلاحية
+const catRoleOf = (u) => roleFromJobTitle(u) || (u && u.role) || "employee";
+
 // يُرجع قائمة المُقيّمين (مرؤوسين/مستفيدين) لشخص معيّن، حسب الخريطة
 const getEvaluators = (target, allUsers) => {
   if (!target) return [];
@@ -233,7 +258,8 @@ const getEvaluators = (target, allUsers) => {
 // من يعتمد خطة كل قيادي؟ يُرجع دالة مطابقة للمعتمِد، أو null (يعتمده مدير الفرع افتراضياً)
 const PLAN_APPROVAL = {
   // الوكلاء والمتابعون كوكلاء: اعتماد فني من مدير المرحلة، ثم تجميع عند مدير الفرع
-  "deputy":       (t,c)=> c.role==="stage_mgr" && c.branch===t.branch && (!t.stage || c.stage===t.stage),
+  // v82: إن حُدِّد المدير المباشر (stageManagerId) صراحةً فهو المعتمِد؛ وإلا فمدير مرحلة الفرع/المرحلة المطابقة
+  "deputy":       (t,c)=> c.role==="stage_mgr" && (t.stageManagerId ? c.id===t.stageManagerId : (c.branch===t.branch && (!t.stage || c.stage===t.stage))),
   // المتابع الفني نوعان: الوكيل-كمتابع → مدير المرحلة؛ المشرف المختص → المشرف التعليمي (امتداد فني تعليمي)
   "supervisor/deputy_role": (t,c)=> c.role==="stage_mgr" && c.branch===t.branch,
   "supervisor/specialist":  (t,c)=> c.role==="branch_ext" && c.roleSubtype==="edu_excellence" && c.branch===t.branch,
@@ -256,8 +282,12 @@ const PLAN_APPROVAL = {
 // يُرجع المعتمِد لخطة شخص (أو null إن لم تُعرَّف قاعدة)
 const getPlanApprover = (target, allUsers) => {
   if (!target) return null;
-  const key = target.roleSubtype ? `${target.role}/${target.roleSubtype}` : target.role;
-  const rule = PLAN_APPROVAL[key] || PLAN_APPROVAL[target.role];
+  // v82: المعتمِد يُحدَّد بالدور المستنتَج من المسمّى الوظيفي (المسمّى يحكم) لا بالصلاحية
+  const cr = catRoleOf(target);
+  // النوع الفرعي يُستخدم فقط حين يوافق المسمّى الصلاحيةَ (كالمشرف المختص)، وإلا نعتمد الدور من المسمّى وحده
+  const useSub = cr === target.role && target.roleSubtype;
+  const key = useSub ? `${cr}/${target.roleSubtype}` : cr;
+  const rule = PLAN_APPROVAL[key] || PLAN_APPROVAL[cr];
   if (!rule) return null;
   return (allUsers||[]).find(c => c.id!==target.id && rule(target, c)) || null;
 };
@@ -3164,17 +3194,18 @@ function BranchManagerPanel({ user, onLogout }) {
   },[]);
 
   const myBranches = scopeBranches(user);
+  // v82: التصنيف بدلالة المسمّى الوظيفي (catRoleOf) لا الصلاحية — فالوكيل ذو صلاحية «متابع فني» يظهر كوكيل
   // متابعة مدير الفرع تشمل: الموظفين + مدراء المراحل والوكلاء التابعين لفروعه (لتقييمهم ومتابعة نتائجهم)
-  const branchEmps = (users||[]).filter(u=>["employee","stage_mgr","deputy"].includes(u.role) && myBranches.includes(u.branch));
+  const branchEmps = (users||[]).filter(u=>["employee","stage_mgr","deputy"].includes(catRoleOf(u)) && myBranches.includes(u.branch));
   // قيادات الفرع (مدراء المراحل والوكلاء والمساعدون الإداريون) — يقيّمهم مدير الفرع ويعتمد خططهم، ويُعرضون منفصلين عن مجموعات المراحل
-  const branchLeaders = (users||[]).filter(u=>["stage_mgr","deputy"].includes(u.role) && myBranches.includes(u.branch));
+  const branchLeaders = (users||[]).filter(u=>["stage_mgr","deputy"].includes(catRoleOf(u)) && myBranches.includes(u.branch));
   // ═══ الفئات الثلاث لمتابعة/اعتماد خطط مدير الفرع (طلب إعادة هيكلة الاعتماد) ═══
-  // الفئة 1: المشرفون المختصون (مسمّى مشرف مختص = supervisor/specialist) — فني: المشرف التعليمي • نهائي: مدير الفرع
-  const catSpecialists = (users||[]).filter(u=>u.role==="supervisor" && u.roleSubtype==="specialist" && myBranches.includes(u.branch));
-  // الفئة 2: قيادات الفرع (مدير مرحلة + وكيل بجميع أنواعه + مساعد إداري=deputy) — فني: مدير المرحلة (للوكلاء والمساعد) • نهائي: مدير الفرع
-  const catLeaders = (users||[]).filter(u=>["stage_mgr","deputy"].includes(u.role) && myBranches.includes(u.branch));
+  // الفئة 1: المشرفون المختصون (مسمّى مشرف مختص) — فني: المشرف التعليمي • نهائي: مدير الفرع
+  const catSpecialists = (users||[]).filter(u=>catRoleOf(u)==="supervisor" && myBranches.includes(u.branch));
+  // الفئة 2: قيادات الفرع (مدير مرحلة + وكيل بجميع أنواعه + مساعد إداري) — فني: مدير المرحلة (للوكلاء والمساعد) • نهائي: مدير الفرع
+  const catLeaders = (users||[]).filter(u=>["stage_mgr","deputy"].includes(catRoleOf(u)) && myBranches.includes(u.branch));
   // الفئة 3: الامتدادات الفنية في الفرع — فني: مدير إدارتهم الوظيفية • نهائي: مدير الفرع
-  const catExtensions = (users||[]).filter(u=>u.role==="branch_ext" && myBranches.includes(u.branch));
+  const catExtensions = (users||[]).filter(u=>catRoleOf(u)==="branch_ext" && myBranches.includes(u.branch));
   const brStagePairs = [];
   myBranches.forEach(br=>{
   const st2 = [...new Set(branchEmps.filter(u=>u.branch===br).map(u=>u.stage).filter(Boolean))].sort();
@@ -5493,6 +5524,17 @@ function AdminPanel({ onLogout, assistant }) {
   </select>
   </div>
   )}
+  {/* v82.1: لكل متابع فني بنوع «وكيل» (أو مسمّى وكيل/مساعد إداري) — نربطه بمدير مرحلته ليظهر لديه للاعتماد */}
+  {form.role==="supervisor"&&(form.supervisorType==="وكيل"||/وكيل|مساعد إداري|مساعد اداري/.test(form.job||""))&&(
+  <div>
+  <label style={{display:"block",fontSize:11,color:"#5B7A9E",marginBottom:4,fontWeight:700}}>🏛️ المدير المباشر (مدير المرحلة) — لظهوره للاعتماد كوكيل</label>
+  <select value={form.stageManagerId||""} onChange={e=>setForm(p=>({...p,stageManagerId:e.target.value}))}
+  style={{width:"100%",padding:"8px 10px",background:"#F4F9FE",border:"1px solid #DDE9F5",borderRadius:8,color:form.stageManagerId?"#15385C":"#8CA3BD",fontSize:12}}>
+  <option value="">-- اختر مدير المرحلة --</option>
+  {stageMgrs.map(s=><option key={s.id} value={s.id}>{s.name}{s.stage?` • ${s.stage}`:""}</option>)}
+  </select>
+  </div>
+  )}
   {form.role==="employee"&&!isDepartment(form.branch)&&[
   {l:"المتابع الفني",k:"supervisorId",opts:[{v:"",l:"-- بدون --"},...supervisors.map(s=>({v:s.id,l:s.name}))]},
   {l:"المدير المباشر",k:"stageManagerId",opts:[{v:"",l:"-- بدون --"},...stageMgrs.map(s=>({v:s.id,l:s.name}))]},
@@ -5884,6 +5926,17 @@ function AdminPanel({ onLogout, assistant }) {
   <option value="">-- اختر النوع --</option>
   <option value="مشرف مختص">🔍 مشرف مختص (للمعلمين)</option>
   <option value="وكيل">📋 وكيل (للإداريين)</option>
+  </select></div>
+   )}
+   {/* v82.1: لكل متابع فني ذي صلاحية وكيل (بنوع المتابع «وكيل» أو مسمّى وكيل/مساعد إداري) — نربطه بمدير مرحلته ليظهر لديه للاعتماد كوكيل */}
+   {editUser.role==="supervisor"&&(editUser.supervisorType==="وكيل"||/وكيل|مساعد إداري|مساعد اداري/.test(editUser.job||""))&&(
+  <div><label style={{display:"block",fontSize:11,color:"#5B7A9E",marginBottom:4,fontWeight:700}}>🏛️ المدير المباشر (مدير المرحلة) — لظهوره للاعتماد كوكيل</label>
+  <select value={editUser.stageManagerId||""} onChange={e=>setEditUser(p=>({...p,stageManagerId:e.target.value}))}
+  style={{width:"100%",padding:"8px 10px",background:"#F4F9FE",border:"1px solid #DDE9F5",borderRadius:8,color:"#1E293B",fontSize:12}}>
+  <option value="">-- اختر مدير المرحلة --</option>
+  {(users||[]).filter(s=>s.id!==editUser.id&&s.role==="stage_mgr").map(s=>(
+  <option key={s.id} value={s.id}>{s.name}{s.stage?` • ${s.stage}`:""}{s.branch?` (${s.branch})`:""}</option>
+  ))}
   </select></div>
    )}
    {editUser.role==="employee"&&!isDepartment(editUser.branch)&&[
@@ -7219,7 +7272,9 @@ function EmployeeGrowthPlan({ user, empEval, idpData, onSave, viewerRole, impact
   // حالة الاعتماد تأتي من المتابع (لا يحرّرها الموظف) فنُبقيها متزامنة مع الخادم بأمان
   useEffect(()=>{ setApproved(idpData?.approved||false); setApprovedBy(idpData?.approvedBy||""); setApprovedAt(idpData?.approvedAt||""); },[idpData?.approved,idpData?.approvedBy,idpData?.approvedAt]);
 
-  const canEditFields = approved ? (role==="branch_mgr") : (role==="employee"||role==="supervisor");
+  // v82: بعد أن يُنهي صاحب الخطة التخطيط (isFinal) تُقفل خطته لديه حتى يعتمدها/يعيد فتحها المتابع الفني — يمنع الإلغاء غير المقصود.
+  // المتابع الفني (viewerRole="supervisor") يظلّ قادراً على التعديل قبل الاعتماد لمراجعة خطة التابع.
+  const canEditFields = approved ? (role==="branch_mgr") : (role==="supervisor" || (role==="employee" && !idpData?.isFinal));
   const canEditStatus = approved && (role==="employee"||role==="supervisor"||role==="branch_mgr");
   // v74: حالة التنفيذ لخطط المعلم/الإداري لا تُتاح إلا بعد اكتمال السلسلة: فني (approved) ← مالي (financeApproved) ← نهائي (branchFinanceApproved).
   // القيادات وغيرهم لا يمرّون بمدير المرحلة، فيكفيهم الاعتماد الفوني/النهائي كما هو.
@@ -7297,6 +7352,8 @@ function EmployeeGrowthPlan({ user, empEval, idpData, onSave, viewerRole, impact
    if (!planReadiness.ok) return;
    onSave({...(idpData||{}),selSources,goals,plan:idpPlan,certificate:cert,approved:false,isFinal:true});
   };
+  // v82: إعادة فتح صاحبِ الخطةِ خطتَه للتعديل قبل اعتماد المتابع (يلغي الإنهاء فقط)
+  const reopenOwn = () => { onSave({...(idpData||{}),selSources,goals,plan:idpPlan,certificate:cert,approved:false,isFinal:false}); };
 
   const approvePlan = () => {
   const at = new Date().toISOString().split("T")[0];
@@ -7760,6 +7817,16 @@ function EmployeeGrowthPlan({ user, empEval, idpData, onSave, viewerRole, impact
    )}
    </div>
   )}
+  {/* v82: تم إنهاء التخطيط وبانتظار اعتماد المتابع — تغذية راجعة واضحة لصاحب الخطة مع إمكانية إعادة الفتح قبل الاعتماد */}
+  {idpPlan.length>0&&!approved&&idpData?.isFinal&&role==="employee"&&(
+   <div style={{marginTop:8,background:"#F59E0B0D",border:"1px solid #F59E0B35",borderRadius:10,padding:"12px 14px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+   <div style={{flex:1,minWidth:180}}>
+   <div style={{fontSize:13,fontWeight:900,color:"#B45309"}}>🔒 تم إنهاء التخطيط — بانتظار اعتماد المتابع الفني</div>
+   <div style={{fontSize:11,color:"#92700A",marginTop:2}}>خطتك أصبحت ظاهرة لدى المتابع الفني لاعتمادها. لا يمكن التعديل الآن. إن أردت تعديلاً قبل الاعتماد فأعد فتح التخطيط.</div>
+   </div>
+   <button onClick={reopenOwn} style={{padding:"8px 16px",borderRadius:10,border:"1px solid #F59E0B50",background:"#F59E0B15",color:"#B45309",fontSize:12,fontWeight:800,cursor:"pointer"}}>↩️ إعادة فتح التخطيط للتعديل</button>
+   </div>
+  )}
   {idpPlan.length>0&&approved&&role!=="branch_mgr"&&(
    <div style={{marginTop:8,background:"#10B9810D",border:"1px solid #10B98130",borderRadius:10,padding:"10px 12px",fontSize:12,color:"#059669",fontWeight:700,textAlign:"center"}}>
    ✅ خطتك معتمدة ومقفلة — لا يمكن تعديلها. لأي تعديل، اطلب فتحها من المتابع الفني.
@@ -8109,7 +8176,8 @@ function EmployeePanel({ user, onLogout }) {
   // المشرف التعليمي = امتداد فني للتميز التعليمي؛ يتابع المشرفين المختصين في فرعه
   const isEduSupervisor = user.role==="branch_ext" && user.roleSubtype==="edu_excellence";
   const myBranchesSet = (user.branches&&user.branches.length)?user.branches:(user.branch?[user.branch]:[]);
-  const eduSupTeam = isEduSupervisor ? (users||[]).filter(u=>u.role==="supervisor" && u.roleSubtype==="specialist" && (myBranchesSet.includes(u.branch))) : [];
+  // v82: المشرف التعليمي يتابع أصحاب مسمّى «مشرف مختص» فقط (بالمسمّى لا الصلاحية) — لا الوكلاء ذوي صلاحية المتابع
+  const eduSupTeam = isEduSupervisor ? (users||[]).filter(u=>catRoleOf(u)==="supervisor" && (myBranchesSet.includes(u.branch))) : [];
   const [selfTarget,setSelfTarget] = useState(null);
   const [peerTarget,setPeerTarget] = useState(null);
   const [roleEvalTarget,setRoleEvalTarget] = useState(null); // {user, party}

@@ -135,6 +135,10 @@ const isAdmin = (u) => !!u && u.role === 'admin';
 const isDirectSupervisor = (a, t) => !!t.supervisorId && t.supervisorId === a.id;
 const isDirectManager = (a, t) => !!t.stageManagerId && t.stageManagerId === a.id;
 
+// v83.1: «المسمّى الوظيفي يحكم» — الحقل الموثوق للتمييز هو job (لا role/roleSubtype/supervisorType).
+// مشرف مختص حقيقي = مسمّاه «مشرف مختص»؛ الوكيل ذو صلاحية متابع مسمّاه يبدأ بـ«وكيل»/«مساعد إداري» فلا يُعدّ مشرفاً مختصاً.
+const isSpecialistByJob = (u) => !!u && u.role === 'supervisor' && /مشرف مختص/.test(u.job || '') && !/وكيل|مساعد إداري|مساعد اداري/.test(u.job || '');
+
 // ─────────────────────────────────────────────────────────────
 // 1) الكتابة: حفظ درجات طرف معيّن
 // ─────────────────────────────────────────────────────────────
@@ -184,12 +188,12 @@ function canReadEmployee(actor, target) {
       // بقية الامتدادات الفنية: من يتبعهم فنيّاً مباشرةً (supervisorId) — مُغطّى أعلاه بـ isDirectSupervisor.
       if (actor.roleSubtype === 'edu_excellence') {
         const brs = branchesOf(actor);
-        // 1) مشرف مختص في فرع المشرف التعليمي
-        if (target.role === 'supervisor' && target.roleSubtype === 'specialist' && brs.includes(target.branch)) return true;
-        // 2) معلم/إداري متابعه الفني مشرفٌ مختص في فرع المشرف التعليمي
+        // 1) مشرف مختص (بالمسمّى الوظيفي) في فرع المشرف التعليمي — لا الوكيل ذو صلاحية المتابع
+        if (isSpecialistByJob(target) && brs.includes(target.branch)) return true;
+        // 2) معلم/إداري متابعه الفني مشرفٌ مختص (بالمسمّى) في فرع المشرف التعليمي
         if (target.role === 'employee' && target.supervisorId) {
           const sup = loadUser(target.supervisorId);
-          if (sup && sup.role === 'supervisor' && sup.roleSubtype === 'specialist' && brs.includes(sup.branch)) return true;
+          if (sup && isSpecialistByJob(sup) && brs.includes(sup.branch)) return true;
         }
       }
       return false;

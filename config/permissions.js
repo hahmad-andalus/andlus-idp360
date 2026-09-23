@@ -178,6 +178,22 @@ function canReadEmployee(actor, target) {
       const sts = stagesOf(actor);
       return sts.length ? sts.includes(target.stage) : true;
     }
+    case 'branch_ext': {
+      // v83: الامتداد الفني يرى نطاقه غير المباشر.
+      // المشرف التعليمي (edu_excellence): مشرفوه المختصون في فرعه + معلمو هؤلاء المشرفين (عبر supervisorId المتسلسل).
+      // بقية الامتدادات الفنية: من يتبعهم فنيّاً مباشرةً (supervisorId) — مُغطّى أعلاه بـ isDirectSupervisor.
+      if (actor.roleSubtype === 'edu_excellence') {
+        const brs = branchesOf(actor);
+        // 1) مشرف مختص في فرع المشرف التعليمي
+        if (target.role === 'supervisor' && target.roleSubtype === 'specialist' && brs.includes(target.branch)) return true;
+        // 2) معلم/إداري متابعه الفني مشرفٌ مختص في فرع المشرف التعليمي
+        if (target.role === 'employee' && target.supervisorId) {
+          const sup = loadUser(target.supervisorId);
+          if (sup && sup.role === 'supervisor' && sup.roleSubtype === 'specialist' && brs.includes(sup.branch)) return true;
+        }
+      }
+      return false;
+    }
     case 'dept_mgr':    // مدير إدارة وظيفية: أخصائيوها وامتداداتها
       return !!actor.roleSubtype && actor.roleSubtype === target.roleSubtype;
     default:

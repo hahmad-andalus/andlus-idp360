@@ -9,10 +9,34 @@
     * { margin: 0; box-sizing: border-box; }
     body { font-family: 'El Messiri', sans-serif; }
     #root { min-height: 100vh; }
+    /* v88: ترويسة/تذييل الطباعة — اسم المنصّة وتاريخ ووقت الطباعة على كل مطبوعات النظام */
+    #app-print-footer { display: none; }
+    @media print {
+      @page { margin: 10mm 8mm 16mm 8mm; }
+      #app-print-footer {
+        display: block; position: fixed; bottom: 0; left: 0; right: 0;
+        text-align: center; font-family: 'El Messiri', sans-serif;
+        font-size: 10px; color: #15385C; padding: 4px 8px;
+        border-top: 1px solid #C7DBF0; background: #fff;
+      }
+      #app-print-footer .dt { color: #5B7A9E; }
+    }
   </style>
 </head>
 <body>
   <div id="root"></div>
+  <!-- v88: تذييل الطباعة (اسم المنصّة + تاريخ ووقت الطباعة) — يظهر على كل صفحات الطباعة فقط -->
+  <div id="app-print-footer">
+    <span style="font-weight:700">منصة التطور المهني — شركة الأندلس التعليمية</span>
+    &nbsp;·&nbsp; <span class="dt" id="app-print-dt"></span>
+  </div>
+  <script>
+    (function(){
+      function stampPrint(){ try{ var e=document.getElementById('app-print-dt'); if(e){ e.textContent = 'تاريخ ووقت الطباعة: ' + new Date().toLocaleString('ar-SA'); } }catch(_){} }
+      window.addEventListener('beforeprint', stampPrint);
+      stampPrint();
+    })();
+  </script>
   <!-- v86: تحميل React محليّاً من نطاق المنصة (يعمل في شبكات الشركات التي تحجب المواقع الخارجية) -->
   <script src="/vendor/react.production.min.js?v=88"></script>
   <script src="/vendor/react-dom.production.min.js?v=88"></script>

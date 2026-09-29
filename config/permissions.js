@@ -215,6 +215,13 @@ function canWriteIdp(actor, target) {
   if (isDirectSupervisor(actor, target)) return true;            // المتابع الفني يعتمد
   if (isDirectManager(actor, target)) return true;               // المدير المباشر
   if (isPlanApproverOf(actor, target)) return true;              // سلسلة الاعتماد الهرمي
+  // v90: المشرف التعليمي (branch_ext / edu_excellence) يعتمد فنيّاً خطط المشرفين المختصين (بالمسمّى)
+  //      في كل الفروع التي يدعمها — نطاق الكتابة يطابق نطاق القراءة (ما يراه يعتمده).
+  //      كان الاعتماد يرتدّ لأنّ السيرفر يرفض الحفظ (لا حالة للمشرف التعليمي هنا) فيعيده loadData للحالة القديمة.
+  if (actor.role === 'branch_ext' && actor.roleSubtype === 'edu_excellence') {
+    const brs = branchesOf(actor);
+    if (isSpecialistByJob(target) && brs.includes(target.branch)) return true;
+  }
   // مدير المرحلة: يعتمد ماليّاً لموظفي مرحلته في فرعه (حتى إن لم يُضبط stageManagerId)
   if (actor.role === 'stage_mgr' && actor.branch === target.branch && actor.stage === target.stage) return true;
   if (actor.role === 'branch_mgr' && branchesOf(actor).includes(target.branch)) return true;

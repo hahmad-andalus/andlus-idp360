@@ -166,6 +166,9 @@ function canWriteEvalParty(actor, target, party) {
 function canReadEmployee(actor, target) {
   if (!actor || !target) return false;
   if (isAdmin(actor)) return true;
+  // v99: مساعد مدير النظام يرى كل الموظفين (قراءةً فقط) — مثل مدير النظام في العرض دون صلاحية التعديل.
+  //      كان يسقط إلى default:false فلا يرى أيّ خطط، فتظهر عدّاداته فارغة/غير دقيقة.
+  if (actor.role === 'admin_assistant') return true;
   if (actor.id === target.id) return true;
   if (isDirectSupervisor(actor, target) || isDirectManager(actor, target)) return true;
   if (isPeerOf(actor.id, target.id)) return true;

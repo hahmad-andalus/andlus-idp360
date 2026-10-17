@@ -109,6 +109,8 @@
       case 'impact_360c': { const d=(await call('GET', '/impact')).impact; _snap.impact=_clone(d); return d; }
       case 'approvals_360c': { const d=(await call('GET', '/approvals')).approvals; _snap.approvals=_clone(d); return d; }
       case 'evalwindow_360c': return await call('GET', '/windows');
+      case 'licenses_360c': { const d=(await call('GET', '/licenses')).licenses; _snap.licenses=_clone(d); return d; }
+      case 'licensewindow_360c': return await call('GET', '/license-windows');
       case 'editreq_360c': return (await call('GET', '/edit-requests')).editRequests;
       case 'twiceeval_360c': return (await call('GET', '/twice')).twice;
       case 'round2_360c': return await call('GET', '/round2').catch(()=>null);
@@ -124,7 +126,7 @@
   // ملاحظة: الواجهة القديمة تكتب الكائن كاملاً؛ نحن نرسل ما يلزم فقط.
   // لتقليل التعديل، نوفّر دوالّ مباشرة أدق (setX) تُستدعى من الواجهة المعدّلة.
   // لقطات لآخر حالة قُرئت من الخادم (للمقارنة عند الكتابة)
-  const _snap = { evals:{}, idps:{}, impact:{}, approvals:{}, readings:{} };
+  const _snap = { evals:{}, idps:{}, impact:{}, approvals:{}, readings:{}, licenses:{} };
   const _clone = (o) => JSON.parse(JSON.stringify(o||{}));
 
   async function set(key, value) {
@@ -133,6 +135,12 @@
         for (const [br, w] of Object.entries(value.branches || {}))
           await call('POST', '/windows', { branch: br, ...w });
         return;
+      case 'licensewindow_360c':
+        for (const [br, w] of Object.entries(value.branches || {}))
+          await call('POST', '/license-windows', { branch: br, ...w });
+        return;
+      case 'licenses_360c':
+        return void await saveLicensesDiff(value);
       case 'twiceeval_360c':
         return void await call('POST', '/twice', { list: value });
       case 'round2_360c':
@@ -228,6 +236,17 @@
       }
     }
     _snap.impact = _clone(nv);
+  }
+
+  // v104: حفظ تفاضليّ لبيانات الرخصة — نُرسل فقط ما تغيّر (موظف واحد لكل طلب)
+  async function saveLicensesDiff(nv) {
+    nv = nv || {};
+    for (const empId of Object.keys(nv)) {
+      if (!_jsonEq(nv[empId], _snap.licenses[empId])) {
+        await call('PUT', '/licenses/' + encodeURIComponent(empId), nv[empId] || {});
+      }
+    }
+    _snap.licenses = _clone(nv);
   }
 
   async function saveApprovalsDiff(nv) {

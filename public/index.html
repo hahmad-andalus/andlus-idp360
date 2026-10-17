@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>نظام الأندلس — التقييم 360° وخطط التطور المهني</title>
-  <link href="https://fonts.googleapis.com/css2?family=El+Messiri:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
   <style>
     * { margin: 0; box-sizing: border-box; }
-    body { font-family: 'El Messiri', sans-serif; }
+    body { font-family: 'Cairo', sans-serif; }
     #root { min-height: 100vh; }
     /* v88: ترويسة/تذييل الطباعة — اسم المنصّة وتاريخ ووقت الطباعة على كل مطبوعات النظام */
     #app-print-footer { display: none; }
@@ -16,7 +16,7 @@
       .no-print { display: none !important; }
       #app-print-footer {
         display: block; position: fixed; bottom: 0; left: 0; right: 0;
-        text-align: center; font-family: 'El Messiri', sans-serif;
+        text-align: center; font-family: 'Cairo', sans-serif;
         font-size: 10px; color: #15385C; padding: 4px 8px;
         border-top: 1px solid #C7DBF0; background: #fff;
       }
@@ -39,8 +39,8 @@
     })();
   </script>
   <!-- v86: تحميل React محليّاً من نطاق المنصة (يعمل في شبكات الشركات التي تحجب المواقع الخارجية) -->
-  <script src="/vendor/react.production.min.js?v=106"></script>
-  <script src="/vendor/react-dom.production.min.js?v=106"></script>
+  <script src="/vendor/react.production.min.js?v=107"></script>
+  <script src="/vendor/react-dom.production.min.js?v=107"></script>
   <!-- شبكة أمان: إن تعذّر تحميل النسخة المحلية لأي سبب، نُحمّل من unpkg تلقائيّاً (نفس السلوك السابق) -->
   <script>
     if (!window.React) { document.write('<scr'+'ipt crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"><\/scr'+'ipt>'); }
@@ -48,8 +48,8 @@
   <script>
     if (!window.ReactDOM) { document.write('<scr'+'ipt crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"><\/scr'+'ipt>'); }
   </script>
-  <script src="/api.js?v=106"></script>
-  <script src="/app.bundle.js?v=106"></script>
+  <script src="/api.js?v=107"></script>
+  <script src="/app.bundle.js?v=107"></script>
   <script>
     const { useState, useEffect, useMemo } = React;
     const root = ReactDOM.createRoot(document.getElementById('root'));

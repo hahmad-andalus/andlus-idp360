@@ -7,6 +7,7 @@ const evals = require('../controllers/evalsController');
 const idps = require('../controllers/idpsController');
 const impact = require('../controllers/impactController');
 const data = require('../controllers/dataController');
+const licenses = require('../controllers/licensesController');
 
 // كل المسارات تتطلّب مصادقة
 router.use(requireAuth);
@@ -59,5 +60,13 @@ router.post('/readings', data.setReading);
 // ─── الإعدادات المشتركة (التعديل للمدير) ───
 router.get('/settings', data.getSettings);
 router.post('/settings', requireRole('admin','admin_assistant'), data.setSetting);
+
+// ─── الرخصة المهنية (v104) ───
+// القراءة للجميع (مُرشَّحة بالصلاحيات داخل المتحكّم)؛ الحفظ لصاحبها أو المدير (يُفحص داخليّاً)
+router.get('/licenses', licenses.listLicenses);
+router.put('/licenses/:employeeId', licenses.saveLicense);
+// نوافذ حصر الرخصة لكل فرع — الفتح/الغلق لمدير النظام فقط
+router.get('/license-windows', licenses.getLicenseWindows);
+router.post('/license-windows', requireRole('admin'), licenses.setLicenseWindow);
 
 module.exports = router;

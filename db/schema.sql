@@ -247,3 +247,27 @@ CREATE TABLE IF NOT EXISTS audit_log (
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_log(user_id);
+
+-- ─────────────────────────────────────────────────────────────
+-- 8) الرخصة المهنية (v104) — سجلّ لكل موظف: آخر إجابة + التواريخ + المرفق (Base64)
+--    نمط مطابق لقياس الأثر (عمود value نصّي يقبل أي طول). سجلٌّ واحدٌ لكل موظف.
+-- ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS licenses (
+  employee_id      TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  main_answer      TEXT,      -- got | passed_general | passed_specialized | not_got
+  sub_answer       TEXT,      -- (عند not_got) none | once | multiple | tested_no_result
+  the_date         TEXT,      -- التاريخ المناسب للإجابة (حصول/اجتياز/تقدّم)
+  att_name         TEXT,      -- اسم الملف المرفق
+  att_type         TEXT,      -- نوع MIME
+  att_data         TEXT,      -- المرفق Base64 (data URL)
+  updated_by       TEXT,
+  updated_at       TEXT
+);
+
+-- فتح/غلق حصر الرخصة لكل فرع (نسخة من eval_windows)
+CREATE TABLE IF NOT EXISTS license_windows (
+  branch      TEXT PRIMARY KEY,
+  is_open     INTEGER DEFAULT 0,
+  open_date   TEXT,
+  close_date  TEXT
+);

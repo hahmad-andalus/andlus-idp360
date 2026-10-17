@@ -101,6 +101,17 @@ function migrate() {
       if (done) console.log(`✓ وُحّد ${done} اسم مستخدم بحروف صغيرة`);
     }
   } catch (e) { console.error('تعذّر توحيد أسماء المستخدمين:', e.message); }
+
+  // 7) الرخصة المهنية (v104) — إنشاء الجدولين إن لم يوجدا (آمن على القواعد الحيّة، لا يمسّ بياناتٍ قائمة)
+  db.exec(`CREATE TABLE IF NOT EXISTS licenses (
+    employee_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    main_answer TEXT, sub_answer TEXT, the_date TEXT,
+    att_name TEXT, att_type TEXT, att_data TEXT, updated_by TEXT, updated_at TEXT
+  )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS license_windows (
+    branch TEXT PRIMARY KEY, is_open INTEGER DEFAULT 0, open_date TEXT, close_date TEXT
+  )`);
+  console.log('✓ جداول الرخصة المهنية جاهزة (licenses, license_windows)');
 }
 
 function rebuildUsers() {

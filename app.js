@@ -134,6 +134,11 @@ seedAdmin()
   .finally(() => {
     app.listen(cfg.PORT, () => {
       console.log(`✓ خادم الأندلس يعمل على المنفذ ${cfg.PORT} [${cfg.NODE_ENV}]`);
+      // v109: جدولة تذكيرات «٧ أيّام على بدء بندٍ تطويريّ معتمد»
+      try {
+        const { startIdpReminderSchedule } = require('./config/idpReminders');
+        startIdpReminderSchedule();
+      } catch (e) { console.error('تعذّر تفعيل جدولة تذكيرات الخطط:', e.message); }
     });
   });
 

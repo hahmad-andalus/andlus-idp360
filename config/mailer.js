@@ -61,4 +61,44 @@ async function sendPasswordReset(toEmail, resetLink, userName) {
   return true;
 }
 
-module.exports = { sendPasswordReset };
+// ─── v109: إشعار «٧ أيّام على بدء بندٍ تطويريّ معتمد» ───
+// يُرسَل لبريد الموظف (اسم المستخدم) بنفس آليّة إرسال استعادة كلمة السر.
+async function sendIdpReminder(toEmail, userName, item) {
+  const t = initTransporter();
+  const prog = (item && item.programName) ? item.programName : 'بندك التطويري';
+  const date = (item && item.targetDate) ? item.targetDate : '';
+  const subject = 'تذكير: ٧ أيّام على بدء بندٍ تطويريّ في خطتك — منصة الأندلس';
+  const text = `مرحباً ${userName || ''}،\n\nنذكّرك بأنه تبقّى ٧ أيّام على بدء تنفيذ البند التطويري المعتمد في خطة التطوّر المهني الخاصة بك:\n\n• البند: ${prog}\n• تاريخ البدء: ${date}\n\nنتمنّى لك التوفيق في تنفيذه.\n\nشركة الأندلس التعليمية`;
+  const html = `<div dir="rtl" style="font-family:'Cairo',sans-serif;color:#15385C;line-height:1.9;max-width:560px">
+    <div style="background:linear-gradient(135deg,#1D5A8A,#2E7FB8);color:#fff;padding:20px 24px;border-radius:16px 16px 0 0">
+      <div style="font-size:19px;font-weight:800">⏰ تذكير بموعد بندٍ تطويريّ</div>
+      <div style="font-size:13px;opacity:0.9;margin-top:4px">منصة التطوّر المهني — شركة الأندلس التعليمية</div>
+    </div>
+    <div style="background:#fff;border:1px solid #E3EEF9;border-top:none;padding:22px 24px;border-radius:0 0 16px 16px">
+      <p style="margin:0 0 14px">مرحباً <b>${userName || ''}</b>،</p>
+      <p style="margin:0 0 16px">تبقّى <b style="color:#2E7FB8">٧ أيّام</b> على بدء تنفيذ البند التطويري المعتمد في خطة التطوّر المهني الخاصة بك:</p>
+      <div style="background:#F4F9FE;border:1px solid #DDE9F5;border-radius:12px;padding:14px 16px;margin-bottom:16px">
+        <div style="font-size:12px;color:#5B7A9E;margin-bottom:4px">📘 البند التطويري</div>
+        <div style="font-size:15px;font-weight:800;color:#15385C;margin-bottom:10px">${prog}</div>
+        <div style="font-size:12px;color:#5B7A9E;margin-bottom:4px">📅 تاريخ البدء</div>
+        <div style="font-size:15px;font-weight:800;color:#059669">${date}</div>
+      </div>
+      <p style="margin:0;color:#5B7A9E;font-size:13px">نتمنّى لك التوفيق في تنفيذه. 🌿</p>
+      <p style="margin:14px 0 0;color:#8CA3BD;font-size:12px">شركة الأندلس التعليمية</p>
+    </div>
+  </div>`;
+
+  if (!t) {
+    console.log('\n📧 [تذكير بند تطويري — لم يُرسل فعلياً، اضبط SMTP]');
+    console.log(`   إلى: ${toEmail} | البند: ${prog} | البدء: ${date}\n`);
+    return false;
+  }
+  await t.sendMail({
+    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    to: toEmail,
+    subject, text, html,
+  });
+  return true;
+}
+
+module.exports = { sendPasswordReset, sendIdpReminder };

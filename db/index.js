@@ -112,6 +112,12 @@ function migrate() {
     branch TEXT PRIMARY KEY, is_open INTEGER DEFAULT 0, open_date TEXT, close_date TEXT
   )`);
   console.log('✓ جداول الرخصة المهنية جاهزة (licenses, license_windows)');
+
+  // 8) إشعارات «٧ أيّام على بدء البند» (v109) — جدول تتبّع لمنع تكرار الإشعار
+  db.exec(`CREATE TABLE IF NOT EXISTS idp_reminders (
+    row_id TEXT PRIMARY KEY, employee_id TEXT, target_date TEXT, sent_at TEXT DEFAULT (datetime('now'))
+  )`);
+  console.log('✓ جدول تذكيرات الخطط جاهز (idp_reminders)');
 }
 
 function rebuildUsers() {

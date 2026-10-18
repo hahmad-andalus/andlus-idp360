@@ -271,3 +271,11 @@ CREATE TABLE IF NOT EXISTS license_windows (
   open_date   TEXT,
   close_date  TEXT
 );
+
+-- v109: تتبّع إشعارات «٧ أيّام على بدء البند» — سجلٌّ واحدٌ لكل بند أُشعِر (يمنع التكرار)
+CREATE TABLE IF NOT EXISTS idp_reminders (
+  row_id      TEXT PRIMARY KEY,            -- معرّف البند (idp_rows.id)
+  employee_id TEXT,
+  target_date TEXT,                        -- تاريخ البدء الذي أُشعِر عنه
+  sent_at     TEXT DEFAULT (datetime('now'))
+);

@@ -45,7 +45,7 @@ app.use(helmet({
   },
 }));                       // رؤوس HTTP آمنة
 app.use(cors({ origin: process.env.CORS_ORIGIN || true, credentials: true }));
-app.use(express.json({ limit: '2mb' })); // حدّ حجم الطلب
+app.use(express.json({ limit: '8mb' })); // حدّ حجم الطلب (v119: رُفع لـ8mb ليسع شواهد قياس الأثر كملفّات base64 — عدّة شواهد لكل بند)
 
 // ─── تحديد معدّل الطلبات (حماية من الإغراق/التخمين) ───
 // مهم: منسوبو المدرسة الواحدة يخرجون غالباً من عنوان IP عام واحد (NAT)، فالحدّ

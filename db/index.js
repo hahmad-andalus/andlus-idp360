@@ -118,6 +118,29 @@ function migrate() {
     row_id TEXT PRIMARY KEY, employee_id TEXT, target_date TEXT, sent_at TEXT DEFAULT (datetime('now'))
   )`);
   console.log('✓ جدول تذكيرات الخطط جاهز (idp_reminders)');
+
+  // ───────────────────────────────────────────────────────────
+  // 9) v119: المشرف التعليمي للمسار العالمي + شواهد قياس الأثر كملفّات
+  //    آمن وidempotent — يُضيف الأعمدة فقط إن لم تكن موجودة، ولا يمسّ بياناتٍ قائمة.
+  // ───────────────────────────────────────────────────────────
+  // أ) عمودان في users: «دور المشرف التعليمي» (للمسار العالمي) + الربط الصريح
+  const userCols2 = db.prepare('PRAGMA table_info(users)').all().map(c => c.name);
+  if (!userCols2.includes('is_edu_supervisor_role')) {
+    db.exec('ALTER TABLE users ADD COLUMN is_edu_supervisor_role INTEGER DEFAULT 0');
+    console.log('✓ أُضيف عمود is_edu_supervisor_role إلى users');
+  }
+  if (!userCols2.includes('edu_supervisor_id')) {
+    db.exec('ALTER TABLE users ADD COLUMN edu_supervisor_id TEXT');
+    console.log('✓ أُضيف عمود edu_supervisor_id إلى users');
+  }
+  // ب) أعمدة الملفّ المرفوع في شواهد قياس الأثر (base64 data URL + اسم + نوع)
+  const iwCols = db.prepare('PRAGMA table_info(impact_witnesses)').all().map(c => c.name);
+  if (!iwCols.includes('file_name')) {
+    db.exec('ALTER TABLE impact_witnesses ADD COLUMN file_name TEXT');
+    db.exec('ALTER TABLE impact_witnesses ADD COLUMN file_type TEXT');
+    db.exec('ALTER TABLE impact_witnesses ADD COLUMN file_data TEXT');
+    console.log('✓ أُضيفت أعمدة ملفّ الشاهد إلى impact_witnesses');
+  }
 }
 
 function rebuildUsers() {

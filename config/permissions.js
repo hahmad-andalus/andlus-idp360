@@ -11,13 +11,16 @@ const { db } = require('../db');
 // ─────────────────────────────────────────────────────────────
 // تحميل المستخدمين بصيغة الواجهة (camelCase)
 // ─────────────────────────────────────────────────────────────
-const USER_COLS = 'id, name, role, role_subtype, job, branch, stage, supervisor_id, stage_manager_id';
+// v119: نقرأ أيضاً حقلَي المشرف التعليمي للمسار العالمي (الدور + الربط الصريح)
+const USER_COLS = 'id, name, role, role_subtype, job, branch, stage, supervisor_id, stage_manager_id, is_edu_supervisor_role, edu_supervisor_id';
 
 function norm(r) {
   return {
     id: r.id, name: r.name, role: r.role, roleSubtype: r.role_subtype || null,
     job: r.job || null, branch: r.branch || null, stage: r.stage || null,
     supervisorId: r.supervisor_id || null, stageManagerId: r.stage_manager_id || null,
+    isEduSupervisorRole: !!r.is_edu_supervisor_role,   // v119: حامل دور المشرف التعليمي (المسار العالمي)
+    eduSupervisorId: r.edu_supervisor_id || null,       // v119: ربط المختص بمشرفه التعليمي
   };
 }
 
@@ -201,8 +204,45 @@ function canReadEmployee(actor, target) {
       }
       return false;
     }
-    case 'dept_mgr':    // مدير إدارة وظيفية: أخصائيوها وامتداداتها
-      return !!actor.roleSubtype && actor.roleSubtype === target.roleSubtype;
+    case 'dept_mgr': {
+      // مدير إدارة وظيفية: أخصائيوها وامتداداتها (نفس النوع الفرعي)
+      if (!!actor.roleSubtype && actor.roleSubtype === target.roleSubtype) return true;
+      // v119: مدير التميز التعليمي (أهلي/أجنبي) يرى كامل وحدته الإشرافية في مساره:
+      //   المشرفون التعليميون + مشرفوهم المختصون + معلمو هؤلاء المختصين.
+      //   التمييز بالمسار: الأهلي (إدارته «التميز التعليمي») يرى المشرفين بالمسمّى؛
+      //   الأجنبي (إدارته «التميز التعليمي الأجنبي») يرى حاملي دور المشرف التعليمي.
+      if (actor.roleSubtype === 'edu_excellence') {
+        const isIntl = (actor.branch || '').includes('الأجنبي');
+        // هل u من المشرفين التعليميين ضمن هذا المسار؟
+        const isEduSupInTrack = (u) => isIntl
+          ? !!u.isEduSupervisorRole
+          : (u.role === 'branch_ext' && u.roleSubtype === 'edu_excellence');
+        // 1) المشرف التعليمي نفسه
+        if (isEduSupInTrack(target)) return true;
+        // هل هذا المشرف المختص ضمن مسار المدير؟
+        //   • إن كان مربوطاً صراحةً (eduSupervisorId) → نحترم الربط حصراً (لا نلتقطه بالفرع).
+        //   • إن لم يُربط → احتياطيّ للأهلي فقط: مختص في فرع أحد المشرفين التعليميين بالمسمّى.
+        const specInTrack = (spec) => {
+          if (spec.eduSupervisorId) {
+            const edu = loadUser(spec.eduSupervisorId);
+            return !!(edu && isEduSupInTrack(edu));
+          }
+          if (!isIntl) {
+            return loadAllUsers().some(s => s.role === 'branch_ext' && s.roleSubtype === 'edu_excellence'
+              && branchesOf(s).includes(spec.branch));
+          }
+          return false; // الأجنبي يعتمد الربط الصريح فقط
+        };
+        // 2) مشرف مختص ضمن المسار
+        if (isSpecialistByJob(target)) return specInTrack(target);
+        // 3) معلم متابعه الفني مشرفٌ مختص ضمن المسار
+        if (target.role === 'employee' && target.supervisorId) {
+          const sup = loadUser(target.supervisorId);
+          if (sup && isSpecialistByJob(sup)) return specInTrack(sup);
+        }
+      }
+      return false;
+    }
     default:
       return false;
   }
@@ -223,7 +263,14 @@ function canWriteIdp(actor, target) {
   //      كان الاعتماد يرتدّ لأنّ السيرفر يرفض الحفظ (لا حالة للمشرف التعليمي هنا) فيعيده loadData للحالة القديمة.
   if (actor.role === 'branch_ext' && actor.roleSubtype === 'edu_excellence') {
     const brs = branchesOf(actor);
-    if (isSpecialistByJob(target) && brs.includes(target.branch)) return true;
+    // المختص المربوط صراحةً لمشرفٍ آخر لا يعتمده هذا المشرف (يحترم الربط)
+    if (isSpecialistByJob(target) && !target.eduSupervisorId && brs.includes(target.branch)) return true;
+  }
+  // v119: المختص المربوط صراحةً (eduSupervisorId) يعتمده مشرفه التعليمي المربوط —
+  //       ولو كان حاملَ دورٍ ممنوح (المسار العالمي) لا مشرفاً بالمسمّى.
+  if (isSpecialistByJob(target) && target.eduSupervisorId && target.eduSupervisorId === actor.id
+      && (actor.isEduSupervisorRole || (actor.role === 'branch_ext' && actor.roleSubtype === 'edu_excellence'))) {
+    return true;
   }
   // مدير المرحلة: يعتمد ماليّاً لموظفي مرحلته في فرعه (حتى إن لم يُضبط stageManagerId)
   if (actor.role === 'stage_mgr' && actor.branch === target.branch && actor.stage === target.stage) return true;

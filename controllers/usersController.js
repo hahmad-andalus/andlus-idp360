@@ -13,8 +13,10 @@ function enrichUser(u, viewer) {
   const branches = db.prepare('SELECT branch FROM user_branches WHERE user_id = ?').all(u.id).map(r => r.branch);
   const stages = db.prepare('SELECT stage FROM user_stages WHERE user_id = ?').all(u.id).map(r => r.stage);
   const peerIds = db.prepare('SELECT peer_id FROM peer_assignments WHERE employee_id = ?').all(u.id).map(r => r.peer_id);
-  const { password_hash, role_subtype, national_id, ...safe } = u;
-  const out = { ...safe, roleSubtype: role_subtype || null, branches, stages, peerIds };
+  const { password_hash, role_subtype, national_id, is_edu_supervisor_role, edu_supervisor_id, ...safe } = u;
+  const out = { ...safe, roleSubtype: role_subtype || null, branches, stages, peerIds,
+    isEduSupervisorRole: !!is_edu_supervisor_role,   // v119: حامل دور المشرف التعليمي (المسار العالمي)
+    eduSupervisorId: edu_supervisor_id || null };     // v119: ربط المختص بمشرفه التعليمي
   // رقم الهوية بيانات شخصية — لا يُعاد إلا لمن يملك نطاقاً إدارياً على الموظف
   if (!viewer || perm.canSeeNationalId(viewer, { ...u, roleSubtype: role_subtype, supervisorId: u.supervisor_id, stageManagerId: u.stage_manager_id })) {
     out.national_id = national_id;
@@ -62,14 +64,16 @@ async function create(req, res) {
 
   const tx = db.transaction(() => {
     db.prepare(`INSERT INTO users
-      (id, username, password_hash, name, national_id, job_number, role, role_subtype, job, branch, stage, supervisor_type, supervisor_id, stage_manager_id)
-      VALUES (@id,@username,@password_hash,@name,@national_id,@job_number,@role,@role_subtype,@job,@branch,@stage,@supervisor_type,@supervisor_id,@stage_manager_id)`)
+      (id, username, password_hash, name, national_id, job_number, role, role_subtype, job, branch, stage, supervisor_type, supervisor_id, stage_manager_id, is_edu_supervisor_role, edu_supervisor_id)
+      VALUES (@id,@username,@password_hash,@name,@national_id,@job_number,@role,@role_subtype,@job,@branch,@stage,@supervisor_type,@supervisor_id,@stage_manager_id,@is_edu_supervisor_role,@edu_supervisor_id)`)
       .run({
         id, username: uname, password_hash: hash, name: b.name,
         national_id: b.nationalId || null, job_number: b.jobNumber || null, role: b.role, role_subtype: b.roleSubtype || null, job: b.job || null,
         branch: b.branch || null, stage: b.stage || null,
         supervisor_type: b.supervisorType || null,
         supervisor_id: b.supervisorId || null, stage_manager_id: b.stageManagerId || null,
+        is_edu_supervisor_role: b.isEduSupervisorRole ? 1 : 0,   // v119
+        edu_supervisor_id: b.eduSupervisorId || null,            // v119
       });
     syncMulti(id, b);
   });
@@ -112,6 +116,7 @@ async function update(req, res) {
       name=@name, national_id=@national_id, job_number=@job_number, role=@role, role_subtype=@role_subtype, job=@job,
       branch=@branch, stage=@stage, supervisor_type=@supervisor_type,
       supervisor_id=@supervisor_id, stage_manager_id=@stage_manager_id,
+      is_edu_supervisor_role=@is_edu_supervisor_role, edu_supervisor_id=@edu_supervisor_id,
       password_hash=@password_hash, updated_at=datetime('now')
       WHERE id=@id`)
       .run({
@@ -120,6 +125,9 @@ async function update(req, res) {
         stage: b.stage ?? u.stage, supervisor_type: b.supervisorType ?? u.supervisor_type,
         supervisor_id: b.supervisorId ?? u.supervisor_id,
         stage_manager_id: b.stageManagerId ?? u.stage_manager_id,
+        // v119: حقلا المشرف التعليمي للمسار العالمي — نحفظ المُرسَل، وإلا نُبقي القائم
+        is_edu_supervisor_role: (b.isEduSupervisorRole !== undefined ? (b.isEduSupervisorRole ? 1 : 0) : u.is_edu_supervisor_role),
+        edu_supervisor_id: (b.eduSupervisorId !== undefined ? (b.eduSupervisorId || null) : u.edu_supervisor_id),
         password_hash: hash,
       });
     if (b.branches !== undefined || b.stages !== undefined || b.peerIds !== undefined) syncMulti(id, b);

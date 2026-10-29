@@ -22,7 +22,10 @@ function listImpact(req, res) {
   witnesses.forEach(w => {
     const k = keyOf(w.employee_id, w.row_id);
     if (!result[k]) result[k] = { scores: {}, witnesses: [] };
-    result[k].witnesses.push({ type: w.wtype, value: w.value });
+    const wit = { type: w.wtype, value: w.value };
+    // v119: الملفّ المرفوع (صورة/PDF) — يُعاد إن وُجد ليفتحه العارض
+    if (w.file_data) wit.file = { data: w.file_data, name: w.file_name || 'شاهد', type: w.file_type || '' };
+    result[k].witnesses.push(wit);
   });
   res.json({ impact: result });
 }
@@ -50,8 +53,18 @@ function saveImpact(req, res) {
       if (!isNaN(v)) insS.run(employeeId, rowId, Number(idx), v);
     }
     db.prepare('DELETE FROM impact_witnesses WHERE employee_id=? AND row_id=?').run(employeeId, rowId);
-    const insW = db.prepare('INSERT INTO impact_witnesses (employee_id,row_id,wtype,value) VALUES (?,?,?,?)');
-    (witnesses || []).forEach(w => { if (w && w.value) insW.run(employeeId, rowId, w.type || 'رابط', w.value); });
+    // v119: نحفظ النصّ/الرابط + الملفّ المرفوع (base64) إن وُجد
+    const insW = db.prepare('INSERT INTO impact_witnesses (employee_id,row_id,wtype,value,file_name,file_type,file_data) VALUES (?,?,?,?,?,?,?)');
+    (witnesses || []).forEach(w => {
+      if (!w) return;
+      const hasFile = w.file && w.file.data;
+      // يُقبل الشاهد إن فيه نصّ/رابط أو ملف مرفوع
+      if (!w.value && !hasFile) return;
+      insW.run(employeeId, rowId, w.type || 'رابط', w.value || '',
+        hasFile ? (w.file.name || null) : null,
+        hasFile ? (w.file.type || null) : null,
+        hasFile ? w.file.data : null);
+    });
   });
   tx();
   res.json({ ok: true });

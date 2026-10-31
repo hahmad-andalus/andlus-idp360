@@ -367,6 +367,10 @@
       supervisorType: u.supervisor_type, supervisorId: u.supervisor_id,
       stageManagerId: u.stage_manager_id,
       branches: u.branches || [], stages: u.stages || [], peerIds: u.peerIds || [],
+      // v134: حقلا المشرف التعليمي للمسار العالمي (أُضيفا في v116/v119) — كانا يسقطان هنا لأنّ
+      //   هذه الدالّة تُعيد بناء الكائن بحقولٍ مختارة؛ فيُحفظان على الخادم ولا يصلان الواجهة فيرتدّ التحديد.
+      isEduSupervisorRole: !!(u.isEduSupervisorRole || u.is_edu_supervisor_role),
+      eduSupervisorId: u.eduSupervisorId || u.edu_supervisor_id || null,
     };
   }
 

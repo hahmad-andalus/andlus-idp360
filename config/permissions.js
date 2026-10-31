@@ -162,7 +162,10 @@ function canWriteEvalParty(actor, target, party) {
     case 'self':        return actor.id === target.id;
     case 'peer':        return isPeerOf(actor.id, target.id);
     case 'supervisor':  return isDirectSupervisor(actor, target);
-    case 'stage_mgr':   return isDirectManager(actor, target);
+    case 'stage_mgr':
+      // v127: مدير المظلّة يقيّم مديري إداراته الفرعية بطرف «المدير المباشر» (كأخصائييه).
+      if (actor.role === 'dept_mgr' && target.role === 'dept_mgr' && isUnderUmbrella(actor.roleSubtype, target.roleSubtype)) return true;
+      return isDirectManager(actor, target);
     case 'subordinate': return getEvalModel(target) === 'leader' && isEvaluatorOf(actor, target);
     case 'beneficiary': {
       const m = getEvalModel(target);
@@ -288,6 +291,9 @@ function canWriteIdp(actor, target) {
   // مدير المرحلة: يعتمد ماليّاً لموظفي مرحلته في فرعه (حتى إن لم يُضبط stageManagerId)
   if (actor.role === 'stage_mgr' && actor.branch === target.branch && actor.stage === target.stage) return true;
   if (actor.role === 'branch_mgr' && branchesOf(actor).includes(target.branch)) return true;
+  // v127: مدير المظلّة يعتمد/يعدّل خطط مديري إداراته الفرعية (كأنّهم أخصائيوه المباشرون).
+  //   يقتصر على المديرين الفرعيين أنفسهم (dept_mgr)؛ أمّا فرقهم فيعتمدها مديرهم الفرعيّ المباشر.
+  if (actor.role === 'dept_mgr' && target.role === 'dept_mgr' && isUnderUmbrella(actor.roleSubtype, target.roleSubtype)) return true;
   return false;
 }
 

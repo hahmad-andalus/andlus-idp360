@@ -63,7 +63,10 @@ router.post('/settings', requireRole('admin','admin_assistant'), data.setSetting
 
 // ─── الرخصة المهنية (v104) ───
 // القراءة للجميع (مُرشَّحة بالصلاحيات داخل المتحكّم)؛ الحفظ لصاحبها أو المدير (يُفحص داخليّاً)
+// v148: القائمة بلا صور (att_data)؛ ومسارٌ منفصل يجلب مرفق موظفٍ واحد عند الطلب (ترتيبه قبل القائمة لا يلزم،
+//   لكن المسار الثابت /attachment محدّد بمعرّف الموظف فلا يلتبس).
 router.get('/licenses', licenses.listLicenses);
+router.get('/licenses/:employeeId/attachment', licenses.getLicenseAttachment);
 router.put('/licenses/:employeeId', licenses.saveLicense);
 // نوافذ حصر الرخصة لكل فرع — الفتح/الغلق لمدير النظام فقط
 router.get('/license-windows', licenses.getLicenseWindows);

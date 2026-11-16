@@ -356,6 +356,8 @@
     setEditRequest: (b) => call('POST', '/edit-requests', b),
     setCourse: (b) => call('POST', '/courses', b),
     setReading: (key) => call('POST', '/readings', { key }),
+    // v148: جلب مرفق رخصة موظفٍ واحد عند الطلب فقط (لا تُنقل الصور في قائمة الرخص)
+    getLicenseAttachment: async (empId) => (await call('GET', '/licenses/' + encodeURIComponent(empId) + '/attachment')).attachment,
     // ج-1: طلبات فتح الحسابات
     listAccountRequests: async () => (await call('GET', '/account-requests')).requests,
     createAccountRequest: (b) => call('POST', '/account-requests', b),

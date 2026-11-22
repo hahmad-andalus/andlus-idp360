@@ -24,8 +24,9 @@ function matchedEmployeeIds(filters) {
   const f = filters || {};
   const where = [];
   const args = [];
-  // لا نشمل إلا الأدوار التي لها خطط تطوير (كما في الواجهة): معلّم/تخصصي/امتداد فني
-  where.push("role IN ('employee','specialist','branch_ext')");
+  // الأدوار التي لها خطط تطوير (كما في الواجهة): معلّم/تخصصي/امتداد فني
+  //   + المشرف المختص (supervisor بنوع specialist) — لا الوكيل-كمتابع. v152
+  where.push("(role IN ('employee','specialist','branch_ext') OR (role='supervisor' AND role_subtype='specialist'))");
   if (f.branch) { where.push('branch = ?'); args.push(f.branch); }
   if (f.stage) { where.push('stage = ?'); args.push(f.stage); }
   let ids = db.prepare(`SELECT id FROM users WHERE ${where.join(' AND ')}`).all(...args).map(r => r.id);

@@ -349,6 +349,8 @@
     getEval: (empId) => call('GET', '/evals/' + empId),
     // الخطط
     saveIdp: (empId, idp) => call('PUT', '/idps/' + empId, idp),
+    // v150: الاستبدال الجماعي لبنود الخطط (مدير النظام) — معاينة أو تنفيذ
+    bulkReplaceIdp: (payload) => call('POST', '/idps/bulk-replace', payload),
     // قياس الأثر
     saveImpact: (empId, rowId, data) => call('PUT', '/impact/' + empId + '/' + rowId, data),
     // الاعتمادات وطلبات التعديل والدورات والقراءات

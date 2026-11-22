@@ -5,6 +5,7 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 
 const evals = require('../controllers/evalsController');
 const idps = require('../controllers/idpsController');
+const bulkIdp = require('../controllers/bulkIdpController'); // v150: الاستبدال الجماعي
 const impact = require('../controllers/impactController');
 const data = require('../controllers/dataController');
 const licenses = require('../controllers/licensesController');
@@ -22,6 +23,8 @@ router.post('/evals/:employeeId/lock', evals.lockEval);
 
 // ─── الخطط ───
 router.get('/idps', idps.listIdps);
+// v150: الاستبدال الجماعي لبنود الخطط (مدير النظام فقط) — مسارٌ ثابت قبل :employeeId
+router.post('/idps/bulk-replace', requireRole('admin'), bulkIdp.bulkReplace);
 router.get('/idps/:employeeId', idps.getIdp);
 router.put('/idps/:employeeId', idps.saveIdp);
 

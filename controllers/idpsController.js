@@ -5,6 +5,11 @@ const { db } = require('../db');
 const crypto = require('crypto');
 const perm = require('../config/permissions');
 
+// v153: عمود ملاحظات المتابع/المدير على بند الخطة. إضافة آمنة ومتكرّرة الاحتمال
+//   (تُتجاهَل إن وُجد العمود) — فلا تكسر قاعدةً قائمة ولا تمسّ أيّ عمود آخر.
+try { db.exec("ALTER TABLE idp_rows ADD COLUMN supervisor_note TEXT"); }
+catch (e) { /* العمود موجود مسبقاً — لا شيء نفعله */ }
+
 // GET /api/idps/:employeeId
 function getIdp(req, res) {
   const empId = req.params.employeeId;
@@ -84,8 +89,8 @@ function saveIdp(req, res) {
     // البنود: نحذف القديمة ونُدرج الجديدة (أبسط وأضمن للاتساق)
     db.prepare('DELETE FROM idp_rows WHERE employee_id = ?').run(empId);
     const ins = db.prepare(`INSERT INTO idp_rows
-      (id, employee_id, cat, comp, need_source, train_method, program_name, provider, url, cost, hours, target_date, eval_method, status, sort_order)
-      VALUES (@id,@employee_id,@cat,@comp,@need_source,@train_method,@program_name,@provider,@url,@cost,@hours,@target_date,@eval_method,@status,@sort_order)`);
+      (id, employee_id, cat, comp, need_source, train_method, program_name, provider, url, cost, hours, target_date, eval_method, status, supervisor_note, sort_order)
+      VALUES (@id,@employee_id,@cat,@comp,@need_source,@train_method,@program_name,@provider,@url,@cost,@hours,@target_date,@eval_method,@status,@supervisor_note,@sort_order)`);
     plan.forEach((r, i) => {
       ins.run({
         id: r.id || crypto.randomUUID(),
@@ -95,7 +100,9 @@ function saveIdp(req, res) {
         program_name: r.programName || null, provider: r.provider || null,
         url: r.url || null, cost: r.cost || null, hours: r.hours || null,
         target_date: r.targetDate || null, eval_method: r.evalMethod || null,
-        status: r.status || 'لم يتم التنفيذ', sort_order: i,
+        status: r.status || 'لم يتم التنفيذ',
+        supervisor_note: (r.supervisorNote != null ? r.supervisorNote : null), // v153
+        sort_order: i,
       });
     });
   });
@@ -110,6 +117,7 @@ function mapRow(r) {
     trainMethod: r.train_method, programName: r.program_name, provider: r.provider,
     url: r.url, cost: r.cost, hours: r.hours, targetDate: r.target_date,
     evalMethod: r.eval_method, status: r.status,
+    supervisorNote: r.supervisor_note, // v153
   };
 }
 
